@@ -74,6 +74,21 @@
 
 # Allow the image folders: a Dockerfile, a package list and one generated lock per architecture each.
 !/images/
+!/images/dotnet-10-runtime/
+!/images/dotnet-10-runtime/Dockerfile
+!/images/dotnet-10-runtime/packages.lock.aarch64
+!/images/dotnet-10-runtime/packages.lock.x86_64
+!/images/dotnet-10-runtime/packages.txt
+!/images/dotnet-10-toolset/
+!/images/dotnet-10-toolset/Dockerfile
+!/images/dotnet-10-toolset/packages.lock.aarch64
+!/images/dotnet-10-toolset/packages.lock.x86_64
+!/images/dotnet-10-toolset/packages.txt
+!/images/dotnet-runtime-deps/
+!/images/dotnet-runtime-deps/Dockerfile
+!/images/dotnet-runtime-deps/packages.lock.aarch64
+!/images/dotnet-runtime-deps/packages.lock.x86_64
+!/images/dotnet-runtime-deps/packages.txt
 !/images/go-toolset/
 !/images/go-toolset/Dockerfile
 !/images/go-toolset/packages.lock.aarch64
@@ -149,6 +164,9 @@
 !/.github/workflows/build-images.yaml
 
 # Allow the recorded image digests: one file per image, read by build/build-image.sh.
+!/images/dotnet-10-runtime/digests.txt
+!/images/dotnet-10-toolset/digests.txt
+!/images/dotnet-runtime-deps/digests.txt
 !/images/go-toolset/digests.txt
 !/images/micro/digests.txt
 !/images/nodejs-24-runtime/digests.txt

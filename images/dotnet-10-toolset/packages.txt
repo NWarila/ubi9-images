@@ -1,0 +1,32 @@
+# ubi9-dotnet-10-toolset: the packages this toolset is built from, one name per line.
+# The image also ships everything these packages depend on.
+# After editing, run build/generate-lock.sh dotnet-10-toolset for each architecture.
+# base — the same fifteen packages as ubi9-micro
+filesystem
+basesystem
+setup
+redhat-release
+glibc
+glibc-common
+glibc-minimal-langpack
+libgcc
+zlib
+ca-certificates
+tzdata
+openssl-libs
+openssl-fips-provider
+openssl-fips-provider-so
+crypto-policies
+# the .NET 10 SDK: compilers, the NuGet client and the runtimes it builds for
+dotnet-sdk-10.0
+# a build environment: shell, core utilities, a package manager so projects can add -devel libraries
+bash
+coreutils
+microdnf
+git-core
+curl-minimal
+tar
+gzip
+unzip
+findutils
+which

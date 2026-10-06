@@ -107,6 +107,13 @@ COPY --from=install /rootfs/ /
 ENV OPENSSL_CONF=/etc/pki/tls/openssl-fips.cnf
 ENV OPENSSL_MODULES=/usr/lib64/ossl-modules
 
+# .NET's container defaults, the same as in Microsoft's images: an ASP.NET
+# Core application that sets no address of its own listens on port 8080 on
+# every address (older applications built on WebHost ignore this and use
+# localhost:5000), and .NET knows it runs in a container.
+ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DOTNET_RUNNING_IN_CONTAINER=true
+
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ENV HOME=/home/nonroot
 USER 65532:65532

@@ -26,3 +26,5 @@ aspnetcore-runtime-10.0
 libicu
 libstdc++
 libbrotli
+# Kerberos (krb5-libs) is left out on purpose: .NET loads it only for
+# Negotiate (Windows-style) authentication, as in Microsoft's own images.

@@ -21,3 +21,5 @@ crypto-policies
 # cultures and time zones, the C++ standard library for the runtime's own code
 libicu
 libstdc++
+# Kerberos (krb5-libs) is left out on purpose: .NET loads it only for
+# Negotiate (Windows-style) authentication, as in Microsoft's own images.

@@ -23,6 +23,7 @@ dotnet-sdk-10.0
 bash
 coreutils
 microdnf
+# what build scripts need to fetch sources and unpack downloaded archives
 git-core
 curl-minimal
 tar

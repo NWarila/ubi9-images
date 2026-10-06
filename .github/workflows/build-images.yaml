@@ -33,6 +33,9 @@ jobs:
           - openjdk-25-runtime
           - python-312-runtime
           - nodejs-24-runtime
+          - dotnet-runtime-deps
+          - dotnet-10-runtime
+          - dotnet-10-toolset
           - go-toolset
           - nodejs-24-toolset
           - openjdk-17-toolset

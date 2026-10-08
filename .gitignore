@@ -166,6 +166,10 @@
 !/.github/workflows/build-images.yaml
 !/.github/workflows/build-test-publish.yaml
 
+# Allow the actionlint configuration: it waives the one message actionlint gives for a
+# documented key it does not know yet.
+!/.github/actionlint.yaml
+
 # Allow the recorded image digests: one file per image, read by build/build-image.sh.
 !/images/dotnet-10-runtime/digests.txt
 !/images/dotnet-10-toolset/digests.txt

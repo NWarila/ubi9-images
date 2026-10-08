@@ -35,7 +35,8 @@ Two tags are published:
 - `sha-<commit>` (the first seven characters of the commit) names the commit an image was published
   from and never moves: a publish that would move it stops instead.
 
-Pin the digest as well, and let a tool such as Renovate keep it current:
+Pin the digest as well, and let a tool such as Renovate keep it current. The digest `latest` names is
+the `Digest:` line of `docker buildx imagetools inspect ghcr.io/nwarila/ubi9-python-312-runtime:latest`:
 
 ```dockerfile
 FROM ghcr.io/nwarila/ubi9-python-312-runtime:latest@sha256:<digest>
@@ -43,8 +44,10 @@ FROM ghcr.io/nwarila/ubi9-python-312-runtime:latest@sha256:<digest>
 
 ## Verifying an image
 
-Every published image carries SLSA build provenance, made by this repository's workflow
-`build-test-publish.yaml`. To check that an image was built here, from this repository's source:
+Every image published by a completed publish run carries SLSA build provenance, made by this
+repository's workflow `build-test-publish.yaml`. A publish that stops half-way can leave a tag whose
+image does not verify until that run is re-run. To check that an image was built here, from this
+repository's source (with `gh` signed in, `gh auth login`):
 
 ```sh
 gh attestation verify oci://ghcr.io/nwarila/ubi9-micro:latest \
@@ -67,9 +70,11 @@ package versions for each architecture, the expected image digest for each archi
 - `build/test-image.sh <image> <architecture>` checks that the image does what its folder promises.
 - On a pull request that changes the images, the build scripts or these workflows, CI builds and tests
   every image on native amd64 and arm64 runners. After such a change is merged to `main`, CI does the
-  same and then publishes each image whose digest changed. When several merges land close together,
-  the newest one publishes. A publish that stops half-way is completed by re-running that workflow
-  run, even after newer merges.
+  same and then publishes each image whose digest changed; a manual run on `main` does the same.
+  Publishes run one at a time, in order. When several merges land close together, each waits its
+  turn and the newest one publishes: an older one finds that its commit is no longer the tip of
+  `main` and writes nothing. A publish that stops half-way is completed by re-running that workflow
+  run, even after newer merges; the re-run waits its turn and never cancels a waiting publish.
 
 ## Images from the previous pipeline
 

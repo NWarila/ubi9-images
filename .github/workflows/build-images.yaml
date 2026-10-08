@@ -28,12 +28,15 @@ jobs:
     uses: ./.github/workflows/build-test-publish.yaml
     with:
       publish: false
-  # One publish at a time: a second merge waits instead of racing the first on the latest tag.
+  # One publish at a time, in order: a merge waits behind the running publish instead of racing
+  # it on the latest tag. "queue: max" keeps every waiting publish (up to 100); GitHub's default
+  # keeps only one and cancels it when another run queues, such as a re-run of an older publish.
   publish:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     concurrency:
       group: publish
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       packages: write

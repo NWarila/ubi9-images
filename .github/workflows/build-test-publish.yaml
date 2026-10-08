@@ -327,6 +327,8 @@ jobs:
               exit 1
             fi
           done
+      # create-storage-record is off: actions/attest makes storage records only for repositories
+      # owned by an organization, and this one belongs to a user account.
       - name: Attest the index
         if: steps.missing.outputs.index_attestation == 'missing'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2

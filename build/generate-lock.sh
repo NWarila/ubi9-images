@@ -17,11 +17,17 @@
 #   From the repository root, inside the builder image the Dockerfiles use
 #   (the BUILDER line at the top of any Dockerfile), once per architecture:
 #
-#     podman run --rm --platform linux/amd64 --volume "$PWD":/repo \
-#         --workdir /repo <builder image> build/generate-lock.sh micro
+#     builder=$(sed -n 's/^ARG BUILDER=//p' images/micro/Dockerfile)
 #
-#     podman run --rm --platform linux/arm64 --volume "$PWD":/repo \
-#         --workdir /repo <builder image> build/generate-lock.sh micro
+#     podman run --rm --platform linux/amd64 --volume "$PWD":/repo:z \
+#         --workdir /repo "$builder" build/generate-lock.sh micro
+#
+#     podman run --rm --platform linux/arm64 --volume "$PWD":/repo:z \
+#         --workdir /repo "$builder" build/generate-lock.sh micro
+#
+#   ":z" lets a host that runs SELinux share the folder with the container.
+#   The run for the other architecture needs that architecture's emulation
+#   (qemu-user-static).
 #
 # WHAT IT READS
 #   images/<image>/packages.txt    the packages the image ships
@@ -45,11 +51,15 @@
 #   creates itself, so the same lock always produces the same image.
 #
 # WHAT IT CHECKS
-#   Every listed name must be installed under that very name (a misspelt name
-#   that some other package happens to provide is refused); every package that
-#   ships must be among the packages the build installs; a held RPM must match
-#   its recorded checksum; every package the build installs must have a row;
-#   and the package manager's own failures stop the run.
+#   Every list file must be readable, and every entry must be a plain package
+#   name or module stream; every listed name must be installed under that very
+#   name (a misspelt name that some other package happens to provide is
+#   refused); every package that ships must be among the packages the build
+#   installs; a held RPM must match its recorded checksum, be built for this
+#   architecture and be held only once; every package the build installs must
+#   have a row; the exact set of locked RPM files must install together into
+#   an empty root (rpm --test); and the package manager's own failures stop
+#   the run.
 #
 # WHICH PACKAGES SHIP
 #   A folder ending in -toolset is a build environment: it ships the listed
@@ -91,8 +101,20 @@ lock_file=$image_dir/packages.lock.$arch
 notes=$(mktemp --directory) || fail 'cannot create a working directory'
 lock_in_progress=''
 cleanup() {
-  rm --recursive --force -- "$notes"
-  [[ -z $lock_in_progress ]] || rm --force -- "$lock_in_progress"
+  local status=$? cleanup_failed=false
+  if ! rm --recursive --force -- "$notes"; then
+    echo "generate-lock: cannot remove working directory $notes" >&2
+    cleanup_failed=true
+  fi
+  if [[ -n $lock_in_progress ]] && ! rm --force -- "$lock_in_progress"; then
+    echo "generate-lock: cannot remove temporary lock $lock_in_progress" >&2
+    cleanup_failed=true
+  fi
+  if (( status == 0 )) && [[ $cleanup_failed == true ]]; then
+    status=1
+  fi
+  trap - EXIT
+  exit "$status"
 }
 trap cleanup EXIT
 # The package manager keeps every RPM it downloads here, so each file can be
@@ -106,9 +128,12 @@ trial_all=$notes/all
 
 microdnf_options=(
   --assumeyes
+  # An empty trial directory has no release file to read the version from.
   --releasever=9
-  --noplugins
   # An empty trial directory has no repository settings; use the builder's.
+  # microdnf refuses --installroot unless --noplugins, --config, cachedir,
+  # reposdir and varsdir are all given.
+  --noplugins
   --config=/etc/dnf/dnf.conf
   --setopt=reposdir=/etc/yum.repos.d
   --setopt=varsdir=/etc/dnf/vars
@@ -124,7 +149,7 @@ microdnf_options=(
 # ---------------------------------------------------------------------------
 
 # Print the entries of a list file, one per line: comments and blank lines
-# removed, surrounding whitespace trimmed.
+# removed, surrounding whitespace trimmed. Fails when the file cannot be read.
 read_list() {
   local line trimmed
   while IFS= read -r line || [[ -n $line ]]; do
@@ -133,8 +158,31 @@ read_list() {
     line=${line%%#*}
     # read with the default IFS trims whitespace from both ends.
     read -r trimmed <<< "$line"
-    [[ -n $trimmed ]] && printf '%s\n' "$trimmed"
+    # An "if", not "&&": a blank last line must not become the status.
+    if [[ -n $trimmed ]]; then
+      printf '%s\n' "$trimmed"
+    fi
   done < "$1"
+}
+
+# Print the entries of a list file sorted and without repeats.
+read_sorted_list() {
+  local entries
+  entries=$(read_list "$1") || return 1
+  [[ -z $entries ]] || sort --unique <<< "$entries"
+}
+
+# Stop unless every argument after the first is a plain package name: the
+# characters Fedora allows in one, starting with a letter or digit. Anything
+# else would reach the package manager as an option (--nogpgcheck) or a
+# pattern before the name check in step 3 could refuse it.
+check_package_names() {
+  local file=$1 name
+  shift
+  for name in "$@"; do
+    [[ $name =~ ^[[:alnum:]][[:alnum:]._+-]*$ ]] \
+      || fail "$file: '$name' is not a package name"
+  done
 }
 
 # Print the name of every package installed in a trial directory, except the
@@ -156,7 +204,9 @@ newest_file_date() {
     --queryformat '[%{FILEMTIMES}\n]' "$1") \
     || fail "rpm cannot read $1"
   while IFS= read -r date; do
-    [[ -n $date ]] && (( date > newest )) && newest=$date
+    if [[ -n $date ]] && (( date > newest )); then
+      newest=$date
+    fi
   done <<< "$dates"
   printf '%s\n' "$newest"
 }
@@ -175,28 +225,58 @@ repository_address() {
 # ---------------------------------------------------------------------------
 # Step 1 of 6: read the lists
 # ---------------------------------------------------------------------------
-echo "Step 1 of 6: reading $image_dir/packages.txt"
+echo 'Step 1 of 6: reading the package lists'
 
-# Each list, sorted and without repeats. A pipeline's status is sort's, so a
-# failure there is caught; the entries are kept in a variable first because
-# mapfile would read one empty line from an empty list.
-listed_text=$(read_list "$image_dir/packages.txt" | sort --unique) \
+# The entries are kept in a variable first because mapfile would read one
+# empty line from an empty list.
+listed_text=$(read_sorted_list "$image_dir/packages.txt") \
   || fail "cannot read $image_dir/packages.txt"
 [[ -n $listed_text ]] || fail "$image_dir/packages.txt lists no packages"
 mapfile -t listed <<< "$listed_text"
+check_package_names "$image_dir/packages.txt" "${listed[@]}"
 
-tools_text=$(read_list build/install-tools.txt | sort --unique) \
+tools_text=$(read_sorted_list build/install-tools.txt) \
   || fail 'cannot read build/install-tools.txt'
 tools=()
 [[ -z $tools_text ]] || mapfile -t tools <<< "$tools_text"
+check_package_names build/install-tools.txt "${tools[@]}"
+
+# The held lines are checked now, so a bad one is reported before the long
+# download, in the same shape download-rpms.sh will demand of every lock row.
+held_list=build/held-rpms.$arch.txt
+held_text=$(read_list "$held_list") || fail "cannot read $held_list"
+held_lines=()
+[[ -z $held_text ]] || mapfile -t held_lines <<< "$held_text"
+held_checksums=()
+held_addresses=()
+for held_line in "${held_lines[@]}"; do
+  read -r checksum address extra <<< "$held_line"
+  [[ -z $extra && $checksum =~ ^[[:xdigit:]]{64}$ ]] \
+    || fail "$held_list: a line must be '<sha256 checksum>  <https" \
+            "address>', found: $held_line"
+  held_name=${address##*/}
+  [[ $address =~ ^https://[^/]+/ && $address != *'?'* && $address != *'#'* \
+     && $held_name =~ ^[[:alnum:]][[:alnum:]_.+~^-]*\.rpm$ ]] \
+    || fail "$held_list: not a plain https address of an RPM file:" \
+            "$address"
+  held_checksums+=("$checksum")
+  held_addresses+=("$address")
+done
 
 # ---------------------------------------------------------------------------
 # Step 2 of 6: switch on module streams, if the image uses any
 # ---------------------------------------------------------------------------
 if [[ -f $image_dir/modules.txt ]]; then
-  mapfile -t modules < <(read_list "$image_dir/modules.txt")
-  (( ${#modules[@]} > 0 )) \
+  modules_text=$(read_list "$image_dir/modules.txt") \
+    || fail "cannot read $image_dir/modules.txt"
+  [[ -n $modules_text ]] \
     || fail "$image_dir/modules.txt lists no module streams"
+  mapfile -t modules <<< "$modules_text"
+  for module in "${modules[@]}"; do
+    [[ $module =~ ^[[:alnum:]][[:alnum:]._+-]*:[[:alnum:]._+-]+$ ]] \
+      || fail "$image_dir/modules.txt: '$module' is not a module stream" \
+              '(name:stream)'
+  done
   echo "Step 2 of 6: switching on module streams: ${modules[*]}"
   for trial in "$trial_ship" "$trial_all"; do
     if ! microdnf "${microdnf_options[@]}" --installroot="$trial" \
@@ -260,11 +340,15 @@ case $image in
   *-toolset)
     echo 'Step 4 of 6: a toolset ships the listed packages and everything' \
          'they depend on'
-    for name in "${!installed_ship[@]}"; do ships[$name]=1; done
+    for name in "${!installed_ship[@]}"; do
+      ships[$name]=1
+    done
     ;;
   *)
     echo 'Step 4 of 6: this image ships the listed packages and nothing else'
-    for name in "${listed[@]}"; do ships[$name]=1; done
+    for name in "${listed[@]}"; do
+      ships[$name]=1
+    done
     ;;
 esac
 
@@ -289,6 +373,7 @@ declare -A row_package=()
 declare -A row_checksum=()
 declare -A row_address=()
 declare -A row_newest=()
+declare -A row_file=()
 
 # The cache keeps files in <cache>/metadata/<repository>-9-<arch>/packages/.
 # nullglob: a pattern that matches nothing expands to nothing, so an empty
@@ -307,6 +392,7 @@ for rpm_file in "$rpm_cache"/metadata/*/packages/*.rpm; do
   row_package[$name]=$(rpm --query --package --nosignature \
     --queryformat '%{NEVRA}' "$rpm_file") \
     || fail "rpm cannot read $rpm_file"
+  row_file[$name]=$rpm_file
 
   checksum=$(sha256sum "$rpm_file") || fail "cannot checksum $rpm_file"
   row_checksum[$name]=${checksum%% *}
@@ -345,40 +431,65 @@ done
 # is downloaded, checked against its checksum, and then takes the place of the
 # version the repository currently publishes under the same name.
 # ---------------------------------------------------------------------------
-echo "Step 6 of 6: applying held packages from build/held-rpms.$arch.txt"
+echo "Step 6 of 6: applying held packages from $held_list"
 
-while read -r checksum address extra; do
-  # The same shape download-rpms.sh will demand of every lock row.
-  [[ -z $extra && $checksum =~ ^[[:xdigit:]]{64}$ ]] \
-    || fail "held-rpms.$arch.txt: a line must be '<sha256 checksum>  <https" \
-            "address>', found: $checksum $address $extra"
-  held_name=${address##*/}
-  [[ $address =~ ^https://[^/]+/ && $address != *'?'* && $address != *'#'* \
-     && $held_name =~ ^[[:alnum:]][[:alnum:]_.+~^-]*\.rpm$ ]] \
-    || fail "held-rpms.$arch.txt: not a plain https address of an RPM file:" \
-            "$address"
-  held_file=$notes/$held_name
+declare -A held=()
+for i in "${!held_addresses[@]}"; do
+  checksum=${held_checksums[i]}
+  address=${held_addresses[i]}
+  held_file=$notes/${address##*/}
   curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+    --connect-timeout 30 --speed-limit 1 --speed-time 60 \
     --proto =https --globoff --output "$held_file" "$address" \
     || fail "cannot download the held file $address"
-  sha256sum --check --quiet <<< "$checksum  $held_file" > /dev/null 2>&1 \
-    || fail "held file does not match its recorded checksum: $address"
+  file_checksum=$(sha256sum -- "$held_file") \
+    || fail "cannot checksum $held_file"
+  file_checksum=${file_checksum%% *}
+  [[ $file_checksum == "${checksum,,}" ]] \
+    || fail "checksum does not match the lock: ${held_file##*/} has" \
+            "$file_checksum, the lock says $checksum"
 
   name=$(rpm --query --package --nosignature --queryformat '%{NAME}' \
     "$held_file") \
     || fail "rpm cannot read $held_file"
+  held_package=$(rpm --query --package --nosignature \
+    --queryformat '%{NEVRA}' "$held_file") \
+    || fail "rpm cannot read $held_file"
+
+  # Checked for every image, so a wrong line is found on the first run.
+  [[ -z ${held[$name]} ]] || fail "$held_list holds '$name' twice"
+  held[$name]=1
+  # download-rpms.sh refuses a lock row for another architecture.
+  held_arch=${held_package##*.}
+  [[ $held_arch == "$arch" || $held_arch == noarch ]] \
+    || fail "$held_list: $held_package is not built for $arch"
 
   # Only images that install this package need the held version.
   [[ -n ${row_package[$name]} ]] || continue
 
-  row_package[$name]=$(rpm --query --package --nosignature \
-    --queryformat '%{NEVRA}' "$held_file") \
-    || fail "rpm cannot read $held_file"
+  row_package[$name]=$held_package
   row_checksum[$name]=$checksum
   row_address[$name]=$address
   row_newest[$name]=$(newest_file_date "$held_file") || exit 1
+  row_file[$name]=$held_file
   echo "             held: ${row_package[$name]}"
-done < <(read_list "build/held-rpms.$arch.txt")
+done
+
+transaction_root=$notes/transaction
+mkdir --parents "$transaction_root" \
+  || fail 'cannot create the final transaction test directory'
+rpm --root="$transaction_root" --initdb \
+  || fail 'rpm cannot initialize the final transaction test directory'
+final_rpms=()
+for name in "${!row_file[@]}"; do
+  final_rpms+=("${row_file[$name]}")
+done
+if ! rpm --root="$transaction_root" --test --install --excludedocs \
+    "${final_rpms[@]}" > "$notes/transaction.log" 2>&1; then
+  tail --lines=20 -- "$notes/transaction.log" >&2 \
+    || echo "generate-lock: cannot show rpm's output" >&2
+  fail 'the exact locked RPM transaction cannot be installed'
+fi
 
 # ---------------------------------------------------------------------------
 # Write the lock
@@ -387,7 +498,9 @@ done < <(read_list "build/held-rpms.$arch.txt")
 # The newest file date across every RPM file in the lock.
 source_date_epoch=0
 for newest in "${row_newest[@]}"; do
-  (( newest > source_date_epoch )) && source_date_epoch=$newest
+  if (( newest > source_date_epoch )); then
+    source_date_epoch=$newest
+  fi
 done
 
 # Sorted by package name, so a refresh shows up as a small, readable diff.

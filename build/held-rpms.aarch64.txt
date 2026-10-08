@@ -1,11 +1,28 @@
 # Held RPM files: packages kept at a fixed version instead of the one Red Hat
-# currently publishes.
+# currently publishes. Only build/generate-lock.sh reads this file: after
+# editing, run it for every image, on each architecture.
 #
-# The OpenSSL FIPS provider below is the exact build covered by FIPS 140-3
-# certificate #4857 (version 3.0.7-8.el9). Red Hat's repository now offers a
-# newer build that the certificate does not cover, so this one is fetched by
-# its address and checked against its checksum.
+# The OpenSSL FIPS provider below carries the module that FIPS 140-3
+# certificate #4857 covers. The certificate names the module's version,
+# 3.0.7-395c1a240fbfffd8, which "openssl list -providers" prints; the
+# package's own version, 3.0.7-8.el9, is Red Hat's repackaging of it.
+# https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4857
 #
-# One file per line:  sha256 checksum, two spaces, download address
+# Certificate #4857 lists no aarch64 platform (it was tested on Intel Xeon,
+# IBM z16 and IBM POWER10): on aarch64 this is the validated module version,
+# but not a validated configuration.
+#
+# Red Hat's repository index now lists only 3.0.7-11.el9_8, whose module,
+# 3.0.7-cda111b5812c30d4, is not yet certified. RHSA-2026:27744 says that
+# build fixes CVE-2026-31790 (moderate); this one does not. The held files
+# are fetched by address and checked against their checksums. Nothing
+# promises that Red Hat keeps files its index no longer lists; if they go,
+# every image build stops.
+#
+# Hold both packages or neither: openssl-fips-provider requires
+# openssl-fips-provider-so at exactly the same version. Remove both lines when
+# a certificate covers the module in the package Red Hat currently publishes.
+#
+# One RPM file per line: sha256 checksum, two spaces, https address.
 0cfe7b281ae2ca3cb0ceaa1a0b84f8c087c4ac16662ebb9c19b5681cf39f99a9  https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/o/openssl-fips-provider-3.0.7-8.el9.aarch64.rpm
 18c77b9b37e7abf0e8cf1dac4b3de770efe895547bdcab8aea8d8d8592954947  https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/o/openssl-fips-provider-so-3.0.7-8.el9.aarch64.rpm

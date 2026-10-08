@@ -59,7 +59,7 @@ def import_standard_library():
             failed.append(f"{name} ({type(error).__name__})")
     if failed:
         raise ImportError(", ".join(failed))
-    return "every module imports"
+    return "every public module imports"
 
 
 def compress_round_trip():

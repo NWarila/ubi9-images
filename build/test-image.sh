@@ -28,13 +28,17 @@
 # Every check prints "PASS <what>" or "FAIL <what>". The script exits 0 only
 # when every check passed, the image test ran to its last line and the
 # cleanup succeeded; 1 when a check failed; 2 when the checks could not be
-# run, a test stopped early or the cleanup failed. A run stopped by a signal
-# (a cancelled CI job) cleans up what it has recorded, then ends with that
-# signal; a container or image made in the moment before it is recorded can
-# be left behind.
+# run, a test stopped early, or the cleanup failed (even if a check failed
+# too). A run stopped by a signal (a cancelled CI job) cleans up what it has
+# recorded, then ends with that signal; a container or image made in the
+# moment before it is recorded can be left behind.
 
+# Results and the runner's own messages go to file descriptors 3 and 4: the
+# run's output and error streams, opened first thing below. A check sends its
+# command's output to a file, and a result line or a cleanup message must
+# never land there.
 fail_setup() {
-  echo "test-image: $*" >&2
+  echo "test-image: $*" >&4
   exit 2
 }
 
@@ -49,7 +53,7 @@ fail_setup() {
 #   $files       every path in the image, one per line (usr/bin/bash)
 #   $output      what the last capture or run_in printed
 #   $run_names   the prefix for image names this run adds:
-#                localhost/test-<run>, unique to this run
+#                localhost/test-<random hex word>, unique to this run
 #
 #   pass <what> / fail <what>           record a result directly
 #   check <what> <command...>           PASS when the command succeeds
@@ -59,9 +63,8 @@ fail_setup() {
 #                                       observed, not assumed
 #   capture <command...>                run it and keep its output in
 #                                       $output; when it exits non-zero,
-#                                       that is a FAIL, its status is
-#                                       returned, and every expect on that
-#                                       output fails too
+#                                       that is a FAIL, and every expect on
+#                                       that output fails too
 #   podman_run <options> <image ref> <arguments...>
 #                                       podman run on this platform, with
 #                                       the container removed afterwards
@@ -86,6 +89,14 @@ fail_setup() {
 #                                       is left in $partner_ref
 #   end_of_test                         the last line of every test.sh
 #
+# Every other command in test.sh must succeed, or be checked with
+# "|| fail_setup". A command at the top level of test.sh that fails on its
+# own line is recorded as a FAIL with its line number, and so is a call to
+# a test.sh function that returns non-zero. Bash does not report a failure
+# in the middle of a function, in the condition of an if, or before an &&
+# or ||: check every command in a function, and never put a check behind a
+# condition.
+#
 # Call build_image, build_partner and start_container directly, never inside
 # $( ): they record what to clean up. A container gets --timeout so a hung
 # network call cannot hold the job. Volume mounts carry :z, which relabels
@@ -109,41 +120,47 @@ names_added=()
 images_added=()
 
 pass() {
-  echo "PASS  $*"
+  echo "PASS  $*" >&3
   passed=$((passed + 1))
   return 0
 }
 
 fail() {
-  echo "FAIL  $*"
+  echo "FAIL  $*" >&3
   failed=$((failed + 1))
   return 0
 }
 
 # A failure shows the last lines the command printed.
 show_tail() {
-  tail -n 15 <<< "$1" | sed 's/^/        /'
+  tail -n 15 <<< "$1" | sed 's/^/        /' >&3
   return 0
 }
 
+# check and check_refused run the command in this shell, not a subshell,
+# so a failure that a helper records inside it (run_in, say) still counts.
+# check then adds no PASS of its own: that FAIL is the result.
 check() {
-  local what=$1 printed
+  local what=$1 failed_before=$failed
   shift
-  if printed=$("$@" 2>&1); then
-    pass "$what"
-  else
+  if ! "$@" > "$work/check.out" 2>&1; then
     fail "$what"
-    show_tail "$printed"
+    show_tail "$(< "$work/check.out")"
+  elif (( failed == failed_before )); then
+    pass "$what"
   fi
 }
 
 check_refused() {
   local what=$1 refusal=$2 printed
   shift 2
-  if printed=$("$@" 2>&1); then
+  if "$@" > "$work/check.out" 2>&1; then
     fail "$what (the command succeeded)"
-    show_tail "$printed"
-  elif [[ $printed == *"$refusal"* ]]; then
+    show_tail "$(< "$work/check.out")"
+    return 0
+  fi
+  printed=$(< "$work/check.out")
+  if [[ $printed == *"$refusal"* ]]; then
     pass "$what"
   else
     fail "$what (it failed, but not with: $refusal)"
@@ -151,6 +168,8 @@ check_refused() {
   fi
 }
 
+# capture records its own FAIL; it returns 0 so that the failure is not
+# counted a second time as a failed command of test.sh.
 capture() {
   local status
   output=$("$@" 2>&1)
@@ -162,7 +181,7 @@ capture() {
     fail "$* (exited with status $status)"
     show_tail "$output"
   fi
-  return "$status"
+  return 0
 }
 
 podman_run() {
@@ -305,13 +324,16 @@ undo() {
   local what=$1
   shift
   if ! "$@" > /dev/null 2>&1; then
-    echo "test-image: cannot $what" >&2
+    echo "test-image: cannot $what" >&4
     cleanup_failed=1
   fi
 }
 
 cleanup() {
   local status=$? id ref i
+  # A signal can arrive while a check has the output sent to a file; send it
+  # back to the run's own streams first.
+  exec 1>&3 2>&4
   for id in "${started_containers[@]}"; do
     undo "remove container $id" podman rm --force "$id"
   done
@@ -326,20 +348,21 @@ cleanup() {
     undo "delete image ${images_added[i]}" \
       podman rmi --no-prune "${images_added[i]}"
   done
-  # Some tools (Go's module cache) write read-only folders; make everything
-  # writable again so the work folder can be deleted.
+  # Some tools (Go's module cache) write read-only folders; make them
+  # writable so the work folder can be deleted. Whether that worked shows in
+  # the deletion, which is checked.
   if [[ -n $work ]]; then
-    chmod -R u+w "$work" 2> /dev/null
+    chmod -R u+w "$work" 2> /dev/null || :
     undo "delete the work folder $work" rm -rf "$work"
   fi
-  if (( cleanup_failed == 1 && status == 0 )); then
-    echo 'test-image: the cleanup failed, so the run does not pass' >&2
+  if (( cleanup_failed == 1 )); then
+    echo 'test-image: the cleanup failed, so the run does not pass' >&4
     exit 2
   fi
   # An "exit" inside a test must not look like a finished run, passing or
   # failing. fail_setup has already said why it stopped.
   if (( runner_finished == 0 && status != 2 )); then
-    echo 'test-image: the test stopped before it finished' >&2
+    echo 'test-image: the test stopped before it finished' >&4
     exit 2
   fi
 }
@@ -347,6 +370,7 @@ cleanup() {
 # ---------------------------------------------------------------------------
 # Arguments.
 # ---------------------------------------------------------------------------
+exec 3>&1 4>&2
 case $# in
   1) arch=$(uname -m) || fail_setup 'cannot read this machine architecture' ;;
   2) arch=$2 ;;
@@ -372,10 +396,14 @@ trap cleanup EXIT
 work=$(mktemp --directory "${TMPDIR:-/tmp}/test-image.XXXXXX") \
   || fail_setup 'cannot create a work folder'
 
-# Image names this run adds carry the work folder's random suffix, so two
-# runs, or a name someone else made, never meet.
-run_suffix=${work##*.}
-run_names=localhost/test-${run_suffix,,}
+# Image names this run adds carry a random hex word, so two runs, or a
+# name someone else made, do not meet (add_name refuses one that exists).
+run_word=$(od -An -N6 -tx1 /dev/urandom) \
+  || fail_setup 'cannot read a random word from /dev/urandom'
+run_word=${run_word//[[:space:]]/}
+[[ $run_word =~ ^[0-9a-f]{12}$ ]] \
+  || fail_setup "unexpected random word: $run_word"
+run_names=localhost/test-$run_word
 image_ref=$run_names/ubi9-$image:$arch
 
 # Toolset tests run what they build in the work folder (Go binaries, a
@@ -387,7 +415,7 @@ chmod +x "$work/can-run" || fail_setup "cannot mark $work/can-run executable"
 "$work/can-run" 2> /dev/null \
   || fail_setup "cannot run programs in $work (mounted noexec?);" \
                 'set TMPDIR to a folder that allows it'
-rm -f "$work/can-run"
+rm -f "$work/can-run" || fail_setup "cannot remove $work/can-run"
 
 test_files=$work/test
 cp -R "$test_dir" "$test_files" || fail_setup 'cannot copy the test folder'
@@ -443,9 +471,18 @@ fi
 # ---------------------------------------------------------------------------
 # What this image promises.
 # ---------------------------------------------------------------------------
+# failed_command <line> <command>: a command of test.sh failed on its own
+# line, outside the check functions; that is a FAIL too.
+failed_command() {
+  local status=$?
+  fail "$test_dir/test.sh line $1: '$2' exited with status $status"
+}
+
+trap 'failed_command "$LINENO" "$BASH_COMMAND"' ERR
 # shellcheck source=/dev/null
 source "$test_dir/test.sh"
 status=$?
+trap - ERR
 (( status == 0 )) || fail_setup "$test_dir/test.sh ended with status $status"
 (( test_finished == 1 )) \
   || fail_setup "$test_dir/test.sh stopped before its end_of_test line"

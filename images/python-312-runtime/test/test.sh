@@ -12,8 +12,10 @@
 
 run_in "$image_ref" /test/probe.py
 expect_line 'runs as user 65532' 'PASS runs as: uid 65532'
-expect_line 'every standard-library module imports' \
-  'PASS standard library: every module imports'
+# Public modules only: probe.py skips the "_" ones and lists the few that
+# cannot or should not be imported here.
+expect_line 'every public standard-library module imports' \
+  'PASS standard library: every public module imports'
 expect 'sqlite works' 'PASS sqlite: 3.'
 expect_line 'zlib, bz2 and lzma work' \
   'PASS compression: zlib, bz2 and lzma round trip ok'

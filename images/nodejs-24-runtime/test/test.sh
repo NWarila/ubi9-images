@@ -15,7 +15,7 @@
 
 run_in "$image_ref" /test/probe.js
 expect_line 'runs as user 65532' 'PASS runs as: uid 65532'
-expect_line 'has English locale data only: de-DE falls back to en-US' \
+expect_line 'de-DE falls back to en-US: no German locale data' \
   'PASS ICU cultures: de-DE resolved to en-US: Tuesday, October 6, 2026'
 expect_line 'converts time zones' 'PASS time zones: 07:00:00'
 expect_line 'gzip and Brotli work' \

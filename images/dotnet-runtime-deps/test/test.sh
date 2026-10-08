@@ -11,10 +11,16 @@
 
 # shellcheck shell=bash disable=SC2154,SC2034
 
-if has_file_matching '^usr/(bin/dotnet|lib64/dotnet/)'; then
-  fail 'has no .NET runtime of its own'
+# A .NET runtime anywhere in the image: the dotnet host, the runtime
+# library, or the shared framework folder.
+host='(^|/)dotnet$'
+library='(^|/)libcoreclr\.so$'
+framework='/shared/Microsoft\.NETCore\.App/'
+no_runtime='has no .NET runtime of its own (host, library or framework)'
+if has_file_matching "$host|$library|$framework"; then
+  fail "$no_runtime"
 else
-  pass 'has no .NET runtime of its own'
+  pass "$no_runtime"
 fi
 check 'has ICU, for cultures and time zones' \
   has_file_matching '^usr/lib64/libicuuc\.so\.[0-9]+$'

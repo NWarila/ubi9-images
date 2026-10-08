@@ -62,7 +62,6 @@
 
 # Allow the shared build inputs: the scripts, the held-RPM lists and the files copied into every image.
 !/build/
-!/build/STIG.pmod
 !/build/build-image.sh
 !/build/download-rpms.sh
 !/build/generate-lock.sh

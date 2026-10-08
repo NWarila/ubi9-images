@@ -1,7 +1,13 @@
 # Install tools: packages needed while an image is being built, in every image.
-# They are locked like everything else and removed before the image is finished.
+# Every Dockerfile runs them inside the image's own files (chroot /rootfs), so
+# they are installed there beside the image's packages. They are locked like
+# everything else and removed before the image is finished, unless the image
+# ships them anyway: a toolset keeps them when its packages depend on them.
 #
 # One package name per line.
+# After editing, run build/generate-lock.sh for every image on both
+# architectures. Images are built from their locks, so until then a change
+# here reaches no image.
 
-# Red Hat's tool that writes the system crypto policy (FIPS:STIG).
+# update-crypto-policies, which sets the system crypto policy to FIPS.
 crypto-policies-scripts

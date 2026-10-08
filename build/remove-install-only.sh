@@ -8,7 +8,8 @@
 #   reads    /lock/packages.lock.<architecture>
 #   changes  /rootfs
 #   checks   every lock line's shape and role, that no package is listed
-#            twice, and that rpm removed what it was asked to
+#            twice, and that rpm succeeds (rpm stops on a package that is not
+#            installed, but only warns about a file it cannot delete)
 #
 # Installing an RPM needs helpers (a shell for its install scripts, the crypto
 # policy tool, and so on). The lock marks those packages "install". Once the
@@ -20,14 +21,13 @@ fail() {
   exit 1
 }
 
-# The assignment's status is uname's, so a failure is caught here.
-lock_file=/lock/packages.lock.$(uname -m) \
-  || fail 'cannot read the architecture of this machine'
+machine_arch=$(uname -m) || fail 'cannot read the architecture of this machine'
+lock_file=/lock/packages.lock.$machine_arch
 
 [[ -f $lock_file ]] || fail "$lock_file does not exist"
 
 # Read every line, so a misspelt role cannot look like "nothing to remove".
-# A line is "package|checksum|address|role"; "#" starts a comment.
+# A line is "package|checksum|address|role", or a comment starting with "#".
 install_only=()
 declare -A seen_packages=()
 line_number=0
@@ -64,11 +64,19 @@ if (( ${#install_only[@]} == 0 )); then
   exit 0
 fi
 
-# --nodeps     remove them although shipped packages name them as
-#              dependencies; leaving those out is the point of a minimal image
-# --noscripts  do not run uninstall scripts; they need the shell being removed
-# --           everything after it is a package name, never an option
-rpm --root=/rootfs --erase --nodeps --noscripts -- "${install_only[@]}" \
+# --nodeps      remove them although shipped packages name them as
+#               dependencies; leaving those out is the point of a minimal image
+# --noscripts   run none of the removed packages' own uninstall scripts
+# --notriggers  run none of the scripts that packages staying in the image run
+#               when another package goes
+#               Most of those scripts need the shell or tools being removed.
+#               The Dockerfiles redo two of them by hand: ldconfig and, where
+#               p11-kit-trust is removed, deleting the libnssckbi.so links.
+#               rpm's code makes --noscripts imply --notriggers and its manual
+#               does not, so both are given.
+# --            everything after it is a package name, never an option
+rpm --root=/rootfs --erase --nodeps --noscripts --notriggers \
+  -- "${install_only[@]}" \
   || fail 'rpm could not remove the install-only packages'
 
 echo "Removed ${#install_only[@]} install-only packages."

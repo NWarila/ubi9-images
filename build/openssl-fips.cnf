@@ -1,27 +1,45 @@
-# OpenSSL configuration for the ubi9 image family.
-# The validated FIPS provider is active and FIPS is the DEFAULT property: any algorithm fetch that does not say otherwise
-# gets a FIPS-approved implementation or fails. The default provider is loaded so that code can explicitly ask for a
-# non-approved algorithm for non-security use (for example Python's usedforsecurity=False) — as on RHEL in FIPS mode.
+# OpenSSL configuration for the ubi9 image family. Every image copies it to
+# /etc/pki/tls/openssl-fips.cnf and points OPENSSL_CONF at it, so OpenSSL
+# reads this file instead of Red Hat's /etc/pki/tls/openssl.cnf.
+#
+# - The validated FIPS provider is active and FIPS is the default property:
+#   any algorithm fetch that does not say otherwise gets its implementation
+#   from the FIPS provider, or fails.
+# - The default provider is loaded too, so a program can explicitly ask for a
+#   non-approved algorithm for non-security use (for example Python's
+#   usedforsecurity=False), as on RHEL in FIPS mode. It also supplies the key
+#   and certificate encoders and decoders, so the base provider is not needed.
+# - TLS follows the system crypto policy (FIPS, set by every Dockerfile), as
+#   Red Hat's openssl.cnf does.
+
+# Any error in this file stops OpenSSL, so a mistake cannot quietly leave
+# FIPS off.
 config_diagnostics = 1
 openssl_conf = openssl_init
+# The FIPS provider's section, fips_sect (named below), comes from the crypto
+# policy: openssl-libs links this file to the section the policy generates.
+.include = /etc/pki/tls/fips_local.cnf
 
 [openssl_init]
 providers = provider_sect
 alg_section = algorithm_sect
+ssl_conf = ssl_sect
 
 [provider_sect]
 fips = fips_sect
-base = base_sect
 default = default_sect
-
-[fips_sect]
-activate = 1
-
-[base_sect]
-activate = 1
 
 [default_sect]
 activate = 1
 
 [algorithm_sect]
 default_properties = fips=yes
+
+[ssl_sect]
+system_default = crypto_policy_sect
+
+# TLS versions, cipher suites, key exchange groups and signature algorithms,
+# written by update-crypto-policies. If this file is missing, OpenSSL refuses
+# to start rather than run without the policy.
+[crypto_policy_sect]
+.include = /etc/crypto-policies/back-ends/opensslcnf.config

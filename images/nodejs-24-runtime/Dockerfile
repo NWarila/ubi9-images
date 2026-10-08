@@ -49,10 +49,8 @@ COPY build/remove-install-only.sh /build/
 RUN --network=none rpm --root=/rootfs --initdb
 RUN --network=none rpm --root=/rootfs --install --excludedocs /rpms/*.rpm
 
-# Set the system crypto policy to FIPS:STIG, using Red Hat's own tool.
-# STIG.pmod is DISA's addition to the FIPS policy (it restricts SSH ciphers).
-COPY --chmod=0644 build/STIG.pmod /rootfs/etc/crypto-policies/policies/modules/STIG.pmod
-RUN --network=none chroot /rootfs update-crypto-policies --no-reload --set FIPS:STIG
+# Set the system crypto policy to FIPS, using Red Hat's own tool.
+RUN --network=none chroot /rootfs update-crypto-policies --no-reload --set FIPS
 
 # Remove the packages that were needed only for the steps above (the lines
 # marked "install" in the lock). What remains is exactly packages.txt.
@@ -69,13 +67,12 @@ RUN --network=none install --directory --mode=0700 --owner=65532 --group=65532 /
 RUN --network=none rpm --root=/rootfs --import /rootfs/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
 RUN --network=none printf '\numask 077\n' >> /rootfs/etc/profile
 
-# OpenSSL loads the FIPS provider and uses FIPS-approved algorithms by default.
+# OpenSSL loads the FIPS provider, uses FIPS-approved algorithms by default, and follows the system crypto policy for TLS.
 COPY --chmod=0644 build/openssl-fips.cnf /rootfs/etc/pki/tls/openssl-fips.cnf
 
-# Give the two files that came from this repository the fixed date. Their date
+# Give the file that came from this repository the fixed date. Its date
 # on disk depends on when the repository was checked out.
 RUN --network=none touch --date="@${SOURCE_DATE_EPOCH}" /rootfs/etc/pki/tls/openssl-fips.cnf
-RUN --network=none touch --date="@${SOURCE_DATE_EPOCH}" /rootfs/etc/crypto-policies/policies/modules/STIG.pmod
 
 # Delete files that belong to no package: a stray /dev/null written by install
 # scripts, links left behind by removed packages, and empty folders.

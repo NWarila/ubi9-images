@@ -2,5 +2,5 @@
 # Written by hand from the build output. build/build-image.sh compares every build
 # against this file and stops on any difference, so a changed lock must come with
 # the new digest, and an unchanged lock can never quietly produce a different image.
-x86_64 sha256:e33b1d5381ce401eaabf1529545262c7bb5889476b798619a660e7f7ae994c1d
-aarch64 sha256:6aa5596d6239104c367bc30565d9f3626dd5182df3ce749a1770f8fd22c919c1
+x86_64 sha256:52cf44b69e99b2fee0f480bde4e93b64043347f108755f4d1c16ed6f24ebee65
+aarch64 sha256:ec99a273d9e10ad2831a6cdc1f901c9b47d0a9b1d390c932a4b5a23d91ffca31

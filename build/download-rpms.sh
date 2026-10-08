@@ -31,8 +31,9 @@ lock_file=/lock/packages.lock.$machine_arch
           'run build/generate-lock.sh for this architecture'
 
 # ---------------------------------------------------------------------------
-# Read the lock. A line is "package|checksum|address|role"; "#" starts a
-# comment. Every field is checked here, with the line number in any message.
+# Read the lock. A line is "package|checksum|address|role", or a comment
+# starting with "#". Every field is checked here, with the line number in any
+# message.
 # ---------------------------------------------------------------------------
 packages=()
 checksums=()
@@ -59,18 +60,14 @@ while IFS= read -r line || [[ -n $line ]]; do
   [[ $role == ship || $role == install ]] \
     || fail "$where has role '$role' (expected ship or install)"
 
-  # A package name that starts with "-" would read as an option to rpm.
-  [[ $package != -* && $package != *[[:space:]]* ]] \
-    || fail "$where has an invalid package field '$package'"
-
   # Only RPMs built for this machine, or for any machine, may be installed.
   package_arch=${package##*.}
   [[ $package_arch == "$machine_arch" || $package_arch == noarch ]] \
     || fail "$where is for architecture '$package_arch'" \
             "(expected $machine_arch or noarch)"
 
-  # The address must be a plain https URL, with a host, that ends in the
-  # RPM's file name.
+  # The address must be a plain https URL, with a host, that ends in an RPM
+  # file name. The file is saved in /rpms under that name.
   [[ $address =~ ^https://[^/]+/ ]] \
     || fail "$where: address is not an https URL: $address"
   [[ $address != *'?'* && $address != *'#'* && $address != *[[:space:]]* ]] \
@@ -80,7 +77,17 @@ while IFS= read -r line || [[ -n $line ]]; do
   [[ $file_name =~ ^[[:alnum:]][[:alnum:]_.+~^-]*\.rpm$ ]] \
     || fail "$where: address does not end in an RPM file name: $address"
 
-  # Two lines must never write the same file.
+  # That name must be this package's: the package without its epoch, so
+  # findutils-1:4.8.0-7.el9.x86_64 is findutils-4.8.0-7.el9.x86_64.rpm.
+  package_file_name=$package.rpm
+  if [[ $package =~ ^(.*-)[0-9]+:(.*)$ ]]; then
+    package_file_name=${BASH_REMATCH[1]}${BASH_REMATCH[2]}.rpm
+  fi
+  [[ $file_name == "$package_file_name" ]] \
+    || fail "$where: address ends in '$file_name', but the file name of" \
+            "$package is '$package_file_name'"
+
+  # Two lines must never write the same file, so no package is listed twice.
   [[ -z ${seen_file_names[$file_name]} ]] \
     || fail "$where reuses the file name '$file_name'" \
             "(first used on line ${seen_file_names[$file_name]})"
@@ -110,12 +117,21 @@ for i in "${!packages[@]}"; do
 
   # --proto =https  a redirect may not lead to a plain http address
   # --globoff       curl must not expand "{a,b}" or "[1-3]" in the address
+  # The time limits turn a connection that never opens, or a transfer that
+  # stalls for a minute, into a failure that --retry tries again, instead
+  # of a hang that lasts until the job's own time limit.
   curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+    --connect-timeout 30 --speed-limit 1 --speed-time 60 \
     --proto =https --globoff --output "$file_name" "$address" \
     || fail "cannot download $address"
 
-  sha256sum --check --quiet <<< "$checksum  $file_name" > /dev/null 2>&1 \
-    || fail "checksum does not match the lock: $file_name"
+  # sha256sum prints lower case; ${checksum,,} lets the lock use either.
+  file_checksum=$(sha256sum -- "$file_name") \
+    || fail "cannot checksum $file_name"
+  file_checksum=${file_checksum%% *}
+  [[ $file_checksum == "${checksum,,}" ]] \
+    || fail "checksum does not match the lock: $file_name has" \
+            "$file_checksum, the lock says $checksum"
 
   # --nosignature: read the package name without judging the signature yet;
   # that is the next check's job.
@@ -127,9 +143,9 @@ for i in "${!packages[@]}"; do
 
   # By default rpm is satisfied by intact digests and lets an UNSIGNED file
   # through. "_pkgverify_level all" makes a trusted signature a requirement.
-  signature=$(rpm --define '_pkgverify_level all' --checksig "$file_name" \
+  rpm_report=$(rpm --define '_pkgverify_level all' --checksig "$file_name" \
     2>&1) \
-    || fail "not signed by a key the builder trusts: $file_name ($signature)"
+    || fail "not signed by a key the builder trusts: $file_name ($rpm_report)"
 done
 
 echo "Downloaded and verified ${#packages[@]} RPM files."

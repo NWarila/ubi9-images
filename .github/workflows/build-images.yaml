@@ -1,6 +1,8 @@
-# Purpose: Build every image from its lock, on both architectures, and record the image digests.
-# Role: Repository-owned check. It runs the same command a person runs, build/build-image.sh,
-#       with the same pinned BuildKit, so a build here gives the same digest as a build on a laptop.
+# Purpose: Build every image from its lock, on both architectures, record the image digests, and
+#          test that each image does what its folder promises.
+# Role: Repository-owned check. It runs the same commands a person runs, build/build-image.sh and
+#       build/test-image.sh, with the same pinned BuildKit, so a build here gives the same digest as
+#       a build on a laptop.
 name: Build images
 on:
   pull_request:
@@ -74,3 +76,10 @@ jobs:
         run: |
           digest=$(jq --raw-output '."containerimage.digest"' "dist/ubi9-${IMAGE}.${ARCH}.json")
           echo "| $IMAGE | $ARCH | $digest |" >> "$GITHUB_STEP_SUMMARY"
+      # Runs images/<image>/test/test.sh with podman, which GitHub's runners include. A toolset's
+      # test also builds the runtime its application runs on, with the same digest check.
+      - name: Test the image
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: build/test-image.sh "$IMAGE" "$ARCH"

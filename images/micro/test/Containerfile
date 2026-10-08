@@ -1,0 +1,15 @@
+# A throwaway image for testing ubi9-micro, never published: micro plus only
+# the openssl command, taken from the same pinned builder the images are
+# built with. Everything else the checks use is micro's own: its libraries,
+# its FIPS provider, its OpenSSL configuration and its CA bundle.
+#
+# Built by images/micro/test/test.sh.
+
+ARG BUILDER
+ARG MICRO
+
+FROM ${BUILDER} AS tool
+RUN microdnf --assumeyes --nodocs install openssl
+
+FROM ${MICRO}
+COPY --from=tool /usr/bin/openssl /usr/bin/openssl

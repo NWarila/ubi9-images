@@ -1,0 +1,7 @@
+{
+  "name": "probe-app",
+  "version": "1.0.0",
+  "description": "An app for the ubi9-nodejs-24-toolset test.",
+  "private": true,
+  "license": "Apache-2.0"
+}

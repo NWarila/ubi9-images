@@ -1,0 +1,7 @@
+{
+  "name": "probe-lib",
+  "version": "1.0.0",
+  "description": "A local package for the ubi9-nodejs-24-toolset test.",
+  "main": "index.js",
+  "license": "Apache-2.0"
+}

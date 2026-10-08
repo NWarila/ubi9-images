@@ -446,8 +446,8 @@ for i in "${!held_addresses[@]}"; do
     || fail "cannot checksum $held_file"
   file_checksum=${file_checksum%% *}
   [[ $file_checksum == "${checksum,,}" ]] \
-    || fail "checksum does not match the lock: ${held_file##*/} has" \
-            "$file_checksum, the lock says $checksum"
+    || fail "checksum does not match $held_list: ${held_file##*/} has" \
+            "$file_checksum, the list says $checksum"
 
   name=$(rpm --query --package --nosignature --queryformat '%{NAME}' \
     "$held_file") \
@@ -475,6 +475,9 @@ for i in "${!held_addresses[@]}"; do
   echo "             held: ${row_package[$name]}"
 done
 
+# Every locked file, held ones included, must install together into an empty
+# root. A held file replaces what the package manager resolved, so only this
+# test shows that the final set still satisfies every dependency.
 transaction_root=$notes/transaction
 mkdir --parents "$transaction_root" \
   || fail 'cannot create the final transaction test directory'

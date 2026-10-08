@@ -66,13 +66,14 @@ fi
 
 # --nodeps      remove them although shipped packages name them as
 #               dependencies; leaving those out is the point of a minimal image
-# --noscripts   run no package scripts: neither the removed packages' own
-# --notriggers  uninstall scripts nor those that packages staying in the image
-#               run when another package goes. Most need the shell or tools
-#               being removed. The Dockerfiles redo two of them by hand:
-#               ldconfig and, where p11-kit-trust is removed, deleting the
-#               libnssckbi.so links. rpm's code makes --noscripts imply
-#               --notriggers and its manual does not, so both are given.
+# --noscripts   run none of the removed packages' own uninstall scripts
+# --notriggers  run none of the scripts that packages staying in the image run
+#               when another package goes
+#               Most of those scripts need the shell or tools being removed.
+#               The Dockerfiles redo two of them by hand: ldconfig and, where
+#               p11-kit-trust is removed, deleting the libnssckbi.so links.
+#               rpm's code makes --noscripts imply --notriggers and its manual
+#               does not, so both are given.
 # --            everything after it is a package name, never an option
 rpm --root=/rootfs --erase --nodeps --noscripts --notriggers \
   -- "${install_only[@]}" \

@@ -16,6 +16,8 @@
 # FIPS off.
 config_diagnostics = 1
 openssl_conf = openssl_init
+# The FIPS provider's section, fips_sect (named below), comes from the crypto
+# policy: openssl-libs links this file to the section the policy generates.
 .include = /etc/pki/tls/fips_local.cnf
 
 [openssl_init]

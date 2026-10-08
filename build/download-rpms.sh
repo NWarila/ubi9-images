@@ -31,8 +31,9 @@ lock_file=/lock/packages.lock.$machine_arch
           'run build/generate-lock.sh for this architecture'
 
 # ---------------------------------------------------------------------------
-# Read the lock. A line is "package|checksum|address|role"; "#" starts a
-# comment. Every field is checked here, with the line number in any message.
+# Read the lock. A line is "package|checksum|address|role", or a comment
+# starting with "#". Every field is checked here, with the line number in any
+# message.
 # ---------------------------------------------------------------------------
 packages=()
 checksums=()

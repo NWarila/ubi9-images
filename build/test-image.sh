@@ -571,11 +571,13 @@ failed_command() {
 # check_test_ran <status of test.sh>: it ended with status 0, its last line
 # is the end_of_test call that ran, and it recorded at least one result.
 check_test_ran() {
-  local test_lines
+  local -a test_lines
   (( $1 == 0 )) || fail_setup "$test_dir/test.sh ended with status $1"
-  test_lines=$(wc --lines < "$test_dir/test.sh") \
-    || fail_setup "cannot count the lines in $test_dir/test.sh"
-  (( test_end_line == test_lines )) \
+  # mapfile counts a last line that has no newline after it, as bash runs it;
+  # wc --lines counts newlines and would not.
+  mapfile -t test_lines < "$test_dir/test.sh" \
+    || fail_setup "cannot read $test_dir/test.sh"
+  (( test_end_line == ${#test_lines[@]} )) \
     || fail_setup "$test_dir/test.sh did not end with end_of_test"
   (( passed + failed > results_before )) \
     || fail_setup "$test_dir/test.sh checked nothing"

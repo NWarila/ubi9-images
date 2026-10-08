@@ -1,0 +1,373 @@
+# Purpose: Build every image from its lock on both architectures, check each digest against
+#          digests.txt, test it, and, when asked to publish, push the images whose digests changed
+#          to GHCR with their tags and SLSA provenance.
+# Role: Reusable workflow, called by build-images.yaml. The attestation is made here, in a job of
+#       its own that runs no build step, so the provenance is SLSA Build Level 3. Consumers verify
+#       an image with this file as the signer workflow (see README.md).
+name: Build, test and publish
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Push the images whose digests changed, with tags and attestations.
+        type: boolean
+        required: true
+# No workflow-level permissions block: one here would apply to every job without its own and
+# override what the caller grants. Each job below either sets its own (read-only) or, like
+# publish, receives exactly the caller's grant.
+# "shell: bash" makes GitHub run every step with -e and -o pipefail, so a failed command inside a
+# pipe fails the step (the default runs bash -e only).
+defaults:
+  run:
+    shell: bash
+jobs:
+  # The one list of images: a folder under images/ per line. A new image is a new line here.
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - id: list
+        run: |
+          images=(
+            micro
+            openjdk-17-runtime
+            openjdk-21-runtime
+            openjdk-25-runtime
+            python-312-runtime
+            nodejs-24-runtime
+            dotnet-runtime-deps
+            dotnet-10-runtime
+            dotnet-10-toolset
+            go-toolset
+            nodejs-24-toolset
+            openjdk-17-toolset
+            openjdk-21-toolset
+            openjdk-25-toolset
+            python-312-toolset
+          )
+          echo "list=$(jq --compact-output --null-input '$ARGS.positional' --args "${images[@]}")" \
+            >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.image }} (${{ matrix.arch }})
+    needs: images
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    # The build runs the repository's scripts, so it gets no write access and no OIDC token.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.images.outputs.list) }}
+        arch: [x86_64, aarch64]
+        # Each architecture builds on a runner of that architecture: no emulation.
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # The build tool, pinned twice: the buildx client version and the BuildKit image digest.
+      # A different version can produce different bytes from the same lock.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.37.1
+          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+      - name: Build the image from its lock
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: build/build-image.sh "$IMAGE" "$ARCH"
+      - name: Record the digest in the run summary
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          digest=$(jq --raw-output '."containerimage.digest"' "dist/ubi9-${IMAGE}.${ARCH}.json")
+          echo "| $IMAGE | $ARCH | $digest |" >> "$GITHUB_STEP_SUMMARY"
+      # Runs images/<image>/test/test.sh with podman, which GitHub's runners include. A toolset's
+      # test also builds the runtime its application runs on, with the same digest check.
+      - name: Test the image
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: build/test-image.sh "$IMAGE" "$ARCH"
+      # The package is public, so this read needs no token. An archive whose digest GHCR already
+      # holds is not handed on: there is nothing new to push.
+      - name: Hand a new image to the publish job
+        id: new
+        if: inputs.publish
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          digest=$(awk -v arch="$ARCH" '$1 == arch {print $2}' "images/$IMAGE/digests.txt")
+          if skopeo inspect --raw "docker://ghcr.io/nwarila/ubi9-$IMAGE@$digest" > /dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: inputs.publish && steps.new.outputs.new == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ubi9-${{ matrix.image }}.${{ matrix.arch }}
+          path: dist/ubi9-${{ matrix.image }}.${{ matrix.arch }}.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  # Runs only when every build and test passed: a red image holds back the whole publish.
+  publish:
+    name: publish ${{ matrix.image }}
+    needs: [images, build]
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # No permissions block: this job gets what the caller grants, which on the publish path is
+    # packages, id-token and attestations write (proven: with a workflow-level "permissions: {}"
+    # it got only metadata read, and GHCR refused the push). It runs no build step.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.images.outputs.list) }}
+    env:
+      IMAGE: ${{ matrix.image }}
+      PACKAGE: ghcr.io/nwarila/ubi9-${{ matrix.image }}
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.37.1
+          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+      # Logged in before the first read: GHCR refuses an anonymous read of a package that does not
+      # exist yet (403) instead of answering "not found". skopeo pushes the images, docker buildx
+      # the index, and actions/attest the attestations.
+      - name: Log in to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" \
+            | skopeo login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$REGISTRY_TOKEN" \
+            | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      # Two questions before anything is written. Is this commit still the tip of main? A
+      # superseded run tags nothing: the newer run publishes, and latest must never move back. It
+      # only finishes what an earlier attempt of itself started: when its sha-<commit> tag already
+      # names these images, the attestations are checked and made below, so a re-run after a newer
+      # merge still repairs a publish that stopped half-way. Has the image changed? It has when
+      # latest is not an index holding exactly the two digests in digests.txt (or nothing is
+      # published yet).
+      - name: Compare with what is published
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          amd64=$(awk '$1 == "x86_64" {print $2}' "images/$IMAGE/digests.txt")
+          arm64=$(awk '$1 == "aarch64" {print $2}' "images/$IMAGE/digests.txt")
+          sha_tag=sha-${GITHUB_SHA::7}
+          # Prints what a tag names: "amd64=<digest> arm64=<digest>", "not-an-index", or "none" when
+          # GHCR answers "not found". Any other read error stops the step. The manifest is kept in
+          # <tag>.json: its hash is the index digest.
+          names() {
+            if ! docker buildx imagetools inspect --raw "$PACKAGE:$1" > "$1.json" 2> read.err; then
+              grep --quiet ': not found$' read.err || { cat read.err >&2; return 1; }
+              echo none
+              return 0
+            fi
+            jq --raw-output '
+              if (.manifests | type) == "array"
+              then [.manifests[] | "\(.platform.architecture)=\(.digest)"] | sort | join(" ")
+              else "not-an-index"
+              end' "$1.json"
+          }
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ $tip != "$GITHUB_SHA" ]]; then
+            tagged=$(names "$sha_tag")
+            if [[ $tagged == none ]]; then
+              echo "| $IMAGE | superseded by $tip: nothing published |" >> "$GITHUB_STEP_SUMMARY"
+              echo "act=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [[ $tagged != "amd64=$amd64 arm64=$arm64" ]]; then
+              echo "$PACKAGE:$sha_tag already names other images ($tagged)" >&2
+              exit 1
+            fi
+            changed=false
+            index=sha256:$(sha256sum < "$sha_tag.json" | cut -d' ' -f1)
+            echo "| $IMAGE | superseded by $tip: finishing $sha_tag |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            published=$(names latest)
+            changed=true
+            if [[ $published == "amd64=$amd64 arm64=$arm64" ]]; then
+              changed=false
+              index=sha256:$(sha256sum < latest.json | cut -d' ' -f1)
+            fi
+            echo "| $IMAGE | published: $published | changed: $changed |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "act=true"
+            echo "changed=$changed"
+            echo "amd64=$amd64"
+            echo "arm64=$arm64"
+          } >> "$GITHUB_OUTPUT"
+          if [[ $changed == false ]]; then
+            echo "index=$index" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.compare.outputs.changed == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ubi9-${{ matrix.image }}.*
+          path: dist
+          merge-multiple: true
+      # Each archive is pushed unchanged, by digest; an architecture that GHCR already holds was
+      # not handed on and is not pushed again. Both digests must be in GHCR before the index.
+      - name: Push the new images, by digest
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          AMD64: ${{ steps.compare.outputs.amd64 }}
+          ARM64: ${{ steps.compare.outputs.arm64 }}
+        run: |
+          for arch in x86_64 aarch64; do
+            digest=$AMD64
+            [[ $arch == aarch64 ]] && digest=$ARM64
+            archive=dist/ubi9-$IMAGE.$arch.tar
+            if [[ -f $archive ]]; then
+              skopeo copy --preserve-digests "oci-archive:$archive" "docker://$PACKAGE@$digest"
+            fi
+            skopeo inspect --raw "docker://$PACKAGE@$digest" > /dev/null
+          done
+      # sha-<commit> is written first and never moves: it is made, or kept when it already names
+      # these images (a re-run), and the publish stops when it names other images. latest is
+      # written last, so it never points at images without their sha-<commit> tag. Just before
+      # writing it, the run asks again whether this commit is still the tip of main: one
+      # superseded by then leaves latest to the newer run. Both tags name the same index: its
+      # digest depends only on the two images.
+      - name: Tag sha-<commit>, then latest
+        id: tags
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMD64: ${{ steps.compare.outputs.amd64 }}
+          ARM64: ${{ steps.compare.outputs.arm64 }}
+        run: |
+          sha_tag=sha-${GITHUB_SHA::7}
+          if docker buildx imagetools inspect --raw "$PACKAGE:$sha_tag" > tagged.json 2> read.err; then
+            tagged=$(jq --raw-output '
+              if (.manifests | type) == "array"
+              then [.manifests[] | "\(.platform.architecture)=\(.digest)"] | sort | join(" ")
+              else "not-an-index"
+              end' tagged.json)
+            if [[ $tagged != "amd64=$AMD64 arm64=$ARM64" ]]; then
+              echo "$PACKAGE:$sha_tag already names other images ($tagged); not moving it" >&2
+              exit 1
+            fi
+          elif grep --quiet ': not found$' read.err; then
+            docker buildx imagetools create --tag "$PACKAGE:$sha_tag" "$PACKAGE@$AMD64" "$PACKAGE@$ARM64"
+          else
+            cat read.err >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect --raw "$PACKAGE:$sha_tag" > index.json
+          index=sha256:$(sha256sum < index.json | cut -d' ' -f1)
+          echo "index=$index" >> "$GITHUB_OUTPUT"
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ $tip == "$GITHUB_SHA" ]]; then
+            docker buildx imagetools create --tag "$PACKAGE:latest" "$PACKAGE@$AMD64" "$PACKAGE@$ARM64"
+            echo "| $IMAGE | $sha_tag and latest name $index |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| $IMAGE | $sha_tag names $index; latest left to $tip |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Every acting run (not only one that changed something) checks the three attestations and
+      # makes any that are missing, so a re-run of a publish that stopped half-way repairs it.
+      # Missing means no copy in the registry: actions/attest records an attestation with GitHub
+      # first and pushes it to GHCR second, so one that stopped in between is made again. Only gh's
+      # "no attestations found in the OCI registry" means missing; any other failure (a read error,
+      # a copy that does not verify) stops the job rather than signing again.
+      # One attestation for the index (what a tag resolves to) and one for each architecture
+      # image (what a pull by platform resolves to). GHCR keeps each under a sha256-<digest> tag.
+      - name: Find missing attestations
+        id: missing
+        if: steps.compare.outputs.act == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The index this run tagged, or the unchanged one at latest.
+          INDEX: ${{ steps.tags.outputs.index || steps.compare.outputs.index }}
+          AMD64: ${{ steps.compare.outputs.amd64 }}
+          ARM64: ${{ steps.compare.outputs.arm64 }}
+        run: |
+          [[ $INDEX =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "no valid index digest: '$INDEX'" >&2; exit 1; }
+          signer="$GITHUB_REPOSITORY/.github/workflows/build-test-publish.yaml"
+          echo "index_digest=$INDEX" >> "$GITHUB_OUTPUT"
+          for subject in index:$INDEX amd64:$AMD64 arm64:$ARM64; do
+            name=${subject%%:*}
+            digest=${subject#*:}
+            if gh attestation verify "oci://$PACKAGE@$digest" --owner NWarila \
+              --signer-workflow "$signer" --bundle-from-oci > /dev/null 2> verify.err; then
+              echo "${name}_attestation=present" >> "$GITHUB_OUTPUT"
+            elif grep --quiet 'no attestations found in the OCI registry' verify.err; then
+              echo "${name}_attestation=missing" >> "$GITHUB_OUTPUT"
+              echo "| $IMAGE | $name attestation missing; making it |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              cat verify.err >&2
+              exit 1
+            fi
+          done
+      # create-storage-record is off: actions/attest makes storage records only for repositories
+      # owned by an organization, and this one belongs to a user account.
+      - name: Attest the index
+        if: steps.missing.outputs.index_attestation == 'missing'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.PACKAGE }}
+          subject-digest: ${{ steps.missing.outputs.index_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the amd64 image
+        if: steps.missing.outputs.amd64_attestation == 'missing'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.PACKAGE }}
+          subject-digest: ${{ steps.compare.outputs.amd64 }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the arm64 image
+        if: steps.missing.outputs.arm64_attestation == 'missing'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.PACKAGE }}
+          subject-digest: ${{ steps.compare.outputs.arm64 }}
+          push-to-registry: true
+          create-storage-record: false
+      # Verified the way a consumer would, with this workflow as the required signer: from
+      # GitHub's attestation store, and again from the copy in the registry.
+      - name: Verify the attestations
+        if: steps.compare.outputs.act == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INDEX: ${{ steps.missing.outputs.index_digest }}
+          AMD64: ${{ steps.compare.outputs.amd64 }}
+          ARM64: ${{ steps.compare.outputs.arm64 }}
+        run: |
+          signer="$GITHUB_REPOSITORY/.github/workflows/build-test-publish.yaml"
+          for subject in "$PACKAGE@$INDEX" "$PACKAGE@$AMD64" "$PACKAGE@$ARM64"; do
+            gh attestation verify "oci://$subject" --owner NWarila --signer-workflow "$signer" \
+              > /dev/null
+            gh attestation verify "oci://$subject" --owner NWarila --signer-workflow "$signer" \
+              --bundle-from-oci > /dev/null
+            echo "| $IMAGE | verified $subject |" >> "$GITHUB_STEP_SUMMARY"
+          done

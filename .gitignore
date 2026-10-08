@@ -161,8 +161,14 @@
 !/.github/.config/template-drift.lock
 !/.github/.config/template-drift.yaml
 
-# Allow the repository's own image build workflow.
+# Allow the repository's own image workflows: the build-and-publish caller and the reusable
+# workflow that builds, tests and publishes.
 !/.github/workflows/build-images.yaml
+!/.github/workflows/build-test-publish.yaml
+
+# Allow the actionlint configuration: it waives the one message actionlint gives for a
+# documented key it does not know yet.
+!/.github/actionlint.yaml
 
 # Allow the recorded image digests: one file per image, read by build/build-image.sh.
 !/images/dotnet-10-runtime/digests.txt

@@ -1,8 +1,8 @@
-# Purpose: Build every image from its lock, on both architectures, record the image digests, and
-#          test that each image does what its folder promises.
-# Role: Repository-owned check. It runs the same commands a person runs, build/build-image.sh and
-#       build/test-image.sh, with the same pinned BuildKit, so a build here gives the same digest as
-#       a build on a laptop.
+# Purpose: Build every image from its lock on both architectures and test it; after a merge to main,
+#          publish the images that changed.
+# Role: Repository-owned check and publisher. On a pull request, or a manual run on another branch,
+#       it builds and tests with a read-only token. On main it does the same and then publishes, with
+#       the only write access. The steps live in the reusable workflow build-test-publish.yaml.
 name: Build images
 on:
   pull_request:
@@ -10,76 +10,38 @@ on:
       - build/**
       - images/**
       - .github/workflows/build-images.yaml
+      - .github/workflows/build-test-publish.yaml
   push:
     branches: [main]
     paths:
       - build/**
       - images/**
       - .github/workflows/build-images.yaml
+      - .github/workflows/build-test-publish.yaml
   workflow_dispatch:
-permissions:
-  contents: read
+permissions: {}
 jobs:
-  build:
-    name: ${{ matrix.image }} (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        # One folder under images/ per line. A new image is a new line here.
-        image:
-          - micro
-          - openjdk-17-runtime
-          - openjdk-21-runtime
-          - openjdk-25-runtime
-          - python-312-runtime
-          - nodejs-24-runtime
-          - dotnet-runtime-deps
-          - dotnet-10-runtime
-          - dotnet-10-toolset
-          - go-toolset
-          - nodejs-24-toolset
-          - openjdk-17-toolset
-          - openjdk-21-toolset
-          - openjdk-25-toolset
-          - python-312-toolset
-        arch: [x86_64, aarch64]
-        # Each architecture builds on a runner of that architecture: no emulation.
-        include:
-          - arch: x86_64
-            runner: ubuntu-24.04
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      # The build tool, pinned twice: the buildx client version and the BuildKit image digest.
-      # A different version can produce different bytes from the same lock.
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          version: v0.37.1
-          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
-      - name: Build the image from its lock
-        env:
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
-        run: build/build-image.sh "$IMAGE" "$ARCH"
-      - name: Record the digest in the run summary
-        env:
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          digest=$(jq --raw-output '."containerimage.digest"' "dist/ubi9-${IMAGE}.${ARCH}.json")
-          echo "| $IMAGE | $ARCH | $digest |" >> "$GITHUB_STEP_SUMMARY"
-      # Runs images/<image>/test/test.sh with podman, which GitHub's runners include. A toolset's
-      # test also builds the runtime its application runs on, with the same digest check.
-      - name: Test the image
-        env:
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
-        run: build/test-image.sh "$IMAGE" "$ARCH"
+  check:
+    if: github.ref != 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-publish.yaml
+    with:
+      publish: false
+  # One publish at a time, in order: a merge waits behind the running publish instead of racing
+  # it on the latest tag. "queue: max" keeps every waiting publish (up to 100); GitHub's default
+  # keeps only one and cancels it when another run queues, such as a re-run of an older publish.
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build-test-publish.yaml
+    with:
+      publish: true

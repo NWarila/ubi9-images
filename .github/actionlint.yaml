@@ -1,0 +1,7 @@
+# actionlint does not know the concurrency "queue" key yet (rhysd/actionlint#654), which
+# GitHub documents. build-images.yaml sets "queue: max" so a publish waiting behind another
+# is never cancelled. Remove this file once actionlint accepts the key.
+paths:
+  .github/workflows/build-images.yaml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'

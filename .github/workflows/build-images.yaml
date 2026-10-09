@@ -1,8 +1,10 @@
-# Purpose: Build every image from its lock on both architectures and test it; after a merge to main,
+# Purpose: Build every image from its lock on both architectures and test it; on main, also
 #          publish the images that changed.
-# Role: Repository-owned check and publisher. On a pull request, or a manual run on another branch,
-#       it builds and tests with a read-only token. On main it does the same and then publishes, with
-#       the only write access. The steps live in the reusable workflow build-test-publish.yaml.
+# Role: Repository-owned check and publisher. On a pull request that changes an image's inputs,
+#       or a manual run on another branch, it builds and tests with a read-only token. On every
+#       push to main, and a manual run on main, it does the same and then publishes; only that
+#       job is granted write access. The steps live in the reusable workflow
+#       build-test-publish.yaml, which consumers name as the signer of the provenance.
 name: Build images
 on:
   pull_request:
@@ -11,13 +13,12 @@ on:
       - images/**
       - .github/workflows/build-images.yaml
       - .github/workflows/build-test-publish.yaml
+  # No paths filter on main: every push to main runs, whatever it changed. A publish whose
+  # commit is no longer the tip of main leaves the images to the run of the newer push, so
+  # every push to main must start one. GitHub starts none when any commit message in the push
+  # asks it to skip CI, such as [skip ci]; after such a push, run this workflow by hand on main.
   push:
     branches: [main]
-    paths:
-      - build/**
-      - images/**
-      - .github/workflows/build-images.yaml
-      - .github/workflows/build-test-publish.yaml
   workflow_dispatch:
 permissions: {}
 jobs:
@@ -28,20 +29,22 @@ jobs:
     uses: ./.github/workflows/build-test-publish.yaml
     with:
       publish: false
-  # One publish at a time, in order: a merge waits behind the running publish instead of racing
-  # it on the latest tag. "queue: max" keeps every waiting publish (up to 100); GitHub's default
-  # keeps only one and cancels it when another run queues, such as a re-run of an older publish.
+
+  # One publish at a time: a newer run waits behind the running publish instead of racing it on
+  # the latest tag. "queue: max" keeps every waiting publish (up to 100); GitHub's default keeps
+  # only one and cancels it when another run queues, such as a re-run of an older publish.
   publish:
+    # Never on a pull request event, not even a merged one's "closed", whose ref is main.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     concurrency:
       group: publish
       cancel-in-progress: false
       queue: max
     permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
+      contents: read       # Check out the source and read the tip of main.
+      packages: write      # Push the images, their tags and attestations to GHCR.
+      id-token: write      # Let actions/attest get an OIDC token for its signing certificate.
+      attestations: write  # Record the attestations in GitHub's attestation store.
     uses: ./.github/workflows/build-test-publish.yaml
     with:
       publish: true

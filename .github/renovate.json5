@@ -1,6 +1,68 @@
+// Purpose: Keep the versions this repository pins current: the actions, runners and build
+//          tools in the workflows, and the builder image at the top of every Dockerfile.
+// Role: Repository-owned Renovate configuration, read by the Renovate GitHub App. It
+//       extends only Renovate's built-in presets: no other repository changes what it does.
+//       Why it extends no organization template:
+//       docs/decision-records/repo/0002-keep-the-renovate-configuration-self-contained.md.
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>NWarila/.github"
+  // Renovate's recommended settings, with every action and image pinned by digest.
+  "extends": ["config:best-practices"],
+  // Only the kinds of pin this repository has: in the workflows and in the Dockerfiles.
+  "enabledManagers": ["github-actions", "dockerfile", "custom.regex"],
+  // Pull requests open early on Monday (UTC), and only for releases at least a week old:
+  // a bad release withdrawn within days never reaches one. Security updates skip both waits.
+  "schedule": ["before 6am on monday"],
+  "minimumReleaseAge": "7 days",
+  // Renovate's defaults, written out because the wait depends on them: a release with no date
+  // counts as too new, and an update still inside the wait gets no branch. The last two rules
+  // below exempt the pins that have no release date.
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
+  "semanticCommits": "enabled",
+  "customManagers": [
+    // The BuildKit image the workflows pin beside the buildx version. Renovate does not
+    // find it on its own.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.yaml$/"],
+      "matchStrings": [
+        "image=moby/buildkit:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]+)"
+      ],
+      "depNameTemplate": "moby/buildkit",
+      "datasourceTemplate": "docker"
+    },
+    // The runner of each architecture in the build matrix. Renovate finds the runs-on
+    // labels on its own, but not these.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.yaml$/"],
+      "matchStrings": ["runner: (?<depName>ubuntu)-(?<currentValue>[0-9.]+(?:-arm)?)"],
+      "datasourceTemplate": "github-runners"
+    }
+  ],
+  "packageRules": [
+    // An update to a workflow is a CI change: its pull request is titled "ci(deps): ...".
+    {
+      "matchFileNames": [".github/workflows/**"],
+      "semanticCommitType": "ci"
+    },
+    // The workflows pin buildx and BuildKit as a pair, and they are released together.
+    {
+      "matchPackageNames": ["docker/buildx", "moby/buildkit"],
+      "groupName": "buildx and BuildKit"
+    },
+    // Every job moves to a new runner in one pull request. Renovate knows no release date
+    // for a runner, so a minimum age would hold the update back forever.
+    {
+      "matchDatasources": ["github-runners"],
+      "groupName": "GitHub runners",
+      "minimumReleaseAge": null
+    },
+    // The builder is pinned by digest alone: no version, so no release date either.
+    {
+      "matchPackageNames": ["registry.access.redhat.com/ubi9/ubi-minimal"],
+      "minimumReleaseAge": null
+    }
   ]
 }

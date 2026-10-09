@@ -13,7 +13,7 @@ tested on amd64 and arm64, and published with signed build provenance.
   signed by the reusable workflow that built them, as
   [GitHub's guidance for SLSA Build Level 3](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/increase-security-rating)
   describes. One command checks that an image was built by this repository's workflow, from this
-  repository's source.
+  repository's source on its `main` branch.
 - **Nothing extra.** Images start from an empty root, hold their locked packages and a few
   configuration files, and run as user 65532. Runtime images have no shell, no package manager and no
   language package tool.
@@ -44,10 +44,11 @@ flowchart LR
    `images/<image>/test/`: the runtime starts, OpenSSL refuses what FIPS forbids, TLS verifies with the
    image's own CA bundle, and a toolset's sample application builds and runs on its runtime image.
 4. **Publish.** A pull request that changes `build/`, `images/` or the two build workflows runs steps 2
-   and 3. After it is merged, the run on `main` repeats them on the merge commit and then publishes each
-   image whose digest changed: it tags the image `latest` and `sha-<commit>` and attests its
+   and 3. Every push to `main`, whatever it changed, runs them on the new commit and then publishes
+   each image whose digest changed: it tags the image `latest` and `sha-<commit>` and attests its
    provenance. The build job has no permission to write the repository or packages and cannot sign;
-   the publish job runs no build.
+   the publish job runs no build. GitHub starts no run when any commit message in the push asks it to
+   skip CI, such as `[skip ci]`; after such a push, run the Build images workflow by hand on `main`.
 
 ## Images
 
@@ -88,19 +89,20 @@ FROM ghcr.io/nwarila/ubi9-python-312-runtime:latest@sha256:<digest>
 
 ## Verifying an image
 
-To check that an image was built by this repository's workflow, from this repository's source (with
-`gh` signed in, `gh auth login`):
+To check that an image was built by this repository's workflow, from this repository's source on its
+`main` branch (with `gh` signed in, `gh auth login`):
 
 ```sh
 gh attestation verify oci://ghcr.io/nwarila/ubi9-micro:latest \
   --repo NWarila/ubi9-images \
-  --signer-workflow NWarila/ubi9-images/.github/workflows/build-test-publish.yaml
+  --signer-workflow NWarila/ubi9-images/.github/workflows/build-test-publish.yaml \
+  --source-ref refs/heads/main
 ```
 
 The same command works for a single architecture's image, by digest:
 `oci://ghcr.io/nwarila/ubi9-micro@sha256:<digest>`. Every image published by a completed publish run
-carries this provenance; a publish that stops half-way can leave a tag whose image does not verify until
-that run is re-run.
+carries this provenance, and the run checks each one with this same policy before it ends; a publish
+that stops half-way can leave a tag whose image does not verify until that run is re-run.
 
 ## Security posture
 

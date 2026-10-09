@@ -1,13 +1,10 @@
-# Purpose: Deny by default: nothing is tracked unless it is allowed below, by
-#          name (org ADR-0003), so every newly tracked file is a reviewed
-#          choice, never an accident.
-# Role: Git's ignore list, read by Git, and by markdownlint-cli2 to choose the
-#       files it lints. A pull request that adds a file adds its line here too.
-#       Git does not look inside an ignored folder, so each folder on the way
-#       to an allowed file has a line of its own; that line allows no file by
-#       itself. Within a group, lines are in git ls-files order, each folder
-#       before its files. To see which line hides a file:
-#       git check-ignore -v <path>
+# Purpose: Deny by default: nothing is tracked unless it is allowed below, by name (org ADR-0003),
+#          so every newly tracked file is a reviewed choice, never an accident.
+# Role: Git's ignore list, read by Git, and by markdownlint-cli2 to choose the files it lints. A
+#       pull request that adds a file adds its line here too. Git does not look inside an ignored
+#       folder, so each folder on the way to an allowed file has a line of its own; that line
+#       allows no file by itself. Within a group, lines are in git ls-files order, each folder
+#       before its files. To see which line hides a file: git check-ignore -v <path>
 
 # Ignore everything.
 **
@@ -18,8 +15,7 @@
 !/.gitignore
 !/.markdownlint-cli2.jsonc
 
-# The README, and the license and community files copied from the
-# organization baseline.
+# The README, and the license and community files copied from the organization baseline.
 !/CODE_OF_CONDUCT.md
 !/CONTRIBUTING.md
 !/LICENSE
@@ -40,8 +36,8 @@
 !/.github/workflows/build-test-publish.yaml
 !/.github/workflows/workflow-containers.yaml
 
-# Documentation: the Diataxis folders, and the reference and explanation
-# pages copied from the organization baseline.
+# Documentation: the Diataxis folders, and the reference and explanation pages copied from the
+# organization baseline.
 !/docs/
 !/docs/diagrams/
 !/docs/diagrams/.gitkeep
@@ -62,9 +58,8 @@
 !/docs/tutorials/
 !/docs/tutorials/.gitkeep
 
-# Decision records: their index (README.md), the organization's (copied from
-# its baseline), this repository's own, and a placeholder folder for
-# type-template records.
+# Decision records: their index (README.md), the organization's (copied from its baseline), this
+# repository's own, and a placeholder folder for type-template records.
 !/docs/decision-records/
 !/docs/decision-records/README.md
 !/docs/decision-records/org/
@@ -85,8 +80,8 @@
 !/docs/decision-records/template/
 !/docs/decision-records/template/.gitkeep
 
-# Shared by every image: the scripts that lock, build and test it, the lists
-# that build/generate-lock.sh reads, and the OpenSSL configuration.
+# Shared by every image: the scripts that lock, build and test it, the lists that
+# build/generate-lock.sh reads, and the OpenSSL configuration.
 !/build/
 !/build/build-image.sh
 !/build/download-rpms.sh
@@ -98,10 +93,9 @@
 !/build/remove-install-only.sh
 !/build/test-image.sh
 
-# The images, one folder each: its Dockerfile, digests.txt (the digest each
-# architecture's build must give), packages.txt, one generated packages.lock
-# per architecture, and test/ (run by build/test-image.sh). The Node.js
-# images add the module files their Dockerfile describes.
+# The images, one folder each: its Dockerfile, digests.txt (the digest each architecture's build
+# must give), packages.txt, one generated packages.lock per architecture, and test/ (run by
+# build/test-image.sh). The Node.js images add the module files their Dockerfile describes.
 !/images/
 
 !/images/dotnet-10-runtime/

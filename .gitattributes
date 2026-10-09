@@ -1,9 +1,7 @@
-# Purpose: Commit and check out every text file with LF line endings, on every
-#          platform and whatever core.autocrlf says. The build copies files
-#          from the working tree into the images (build/openssl-fips.cnf, for
-#          one), so CRLF endings would change the image digests; bash also
-#          cannot run a script that has them.
-# Role: Git attributes, read by Git whenever it commits or checks out a file.
-#       One rule covers every path: Git detects binary files itself and leaves
-#       them unchanged.
+# Purpose: Commit and check out every text file with LF line endings, on every platform and
+#          whatever core.autocrlf says. The build copies files from the working tree into the
+#          images (build/openssl-fips.cnf, for one), so CRLF endings would change the image
+#          digests; bash also cannot run a script that has them.
+# Role: Git attributes, read by Git whenever it commits or checks out a file. One rule covers
+#       every path: Git detects binary files itself and leaves them unchanged.
 * text=auto eol=lf

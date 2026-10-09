@@ -1,11 +1,10 @@
-// Purpose: Lint every tracked Markdown file with every markdownlint rule but
-//          five. Most Markdown here is copied unchanged from NWarila/.github:
-//          the community files and the organization's documents under docs/.
-//          That repository lints them with the five rules below turned off;
-//          they are off here too, so that a copy that passes there passes here.
-// Role: markdownlint configuration, read by markdownlint-cli2 and by the VS
-//       Code markdownlint extension. To lint every tracked Markdown file, run
-//       markdownlint-cli2 with no arguments from the repository root.
+// Purpose: Lint every tracked Markdown file with every markdownlint rule but five. Most Markdown
+//          here is copied unchanged from NWarila/.github: the community files and the
+//          organization's documents under docs/. That repository lints them with the five rules
+//          below turned off; they are off here too, so that a copy that passes there passes here.
+// Role: markdownlint configuration, read by markdownlint-cli2 and by the VS Code markdownlint
+//       extension. To lint every tracked Markdown file, run markdownlint-cli2 with no arguments
+//       from the repository root.
 {
   "config": {
     "line-length": false,
@@ -14,8 +13,8 @@
     "first-line-heading": false,
     "table-column-style": false
   },
-  // The files to lint: every Markdown file that .gitignore allows, which is
-  // every tracked one. Untracked notes and node_modules folders are skipped.
+  // The files to lint: every Markdown file that .gitignore allows, which is every tracked one.
+  // Untracked notes and node_modules folders are skipped.
   "globs": [
     "**/*.md"
   ],

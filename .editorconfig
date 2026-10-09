@@ -1,8 +1,8 @@
-# Purpose: Editor settings for every file in this repository, so that every
-#          editor saves the same encoding, line endings and indentation.
-# Role: EditorConfig settings (https://editorconfig.org), read by any editor
-#       that supports EditorConfig; no build or CI step reads them.
-#       .gitattributes makes Git itself use the same LF line endings.
+# Purpose: Editor settings for every file in this repository, so that every editor saves the same
+#          encoding, line endings and indentation.
+# Role: EditorConfig settings (https://editorconfig.org), read by any editor that supports
+#       EditorConfig; no build or CI step reads them. .gitattributes makes Git itself use the same
+#       LF line endings.
 
 # Stop here: ignore .editorconfig files in the folders above this one.
 root = true
@@ -22,3 +22,8 @@ indent_size = 4
 # The repository's shell style keeps every line within 80 columns.
 [*.sh]
 max_line_length = 80
+
+# One wrap width for the repository's configuration and workflow files. A pinned reference that
+# cannot be split (an action's commit with its version comment, an image digest) may run longer.
+[{*.yaml,*.yml,*.json5,*.jsonc,.gitignore,.gitattributes,.editorconfig,CODEOWNERS}]
+max_line_length = 98

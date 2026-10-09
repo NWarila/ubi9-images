@@ -292,10 +292,10 @@ jobs:
       # Every acting run (not only one that changed something) checks the three attestations and
       # makes any that are missing, so a re-run of a publish that stopped half-way repairs it.
       # Missing means no copy in the registry: actions/attest records an attestation with GitHub
-      # first and pushes it to GHCR second, so one that stopped in between is made again. Only gh's
-      # "no attestations found in the OCI registry" means missing; any other failure (a read error,
-      # a copy that does not pass the consumer's policy, VERIFY_* above) stops the job rather than
-      # signing again.
+      # first and pushes it to GHCR second, so one that stopped in between is made again. Only
+      # gh's "no attestations found in the OCI registry" means missing; any other failure (a read
+      # error, a copy that does not pass the consumer's policy, VERIFY_* above) stops the job
+      # rather than signing again.
       # One attestation for the index (what a tag resolves to) and one for each architecture
       # image (what a pull by platform resolves to). GHCR keeps each under a sha256-<digest> tag.
       - name: Find missing attestations

@@ -3,8 +3,9 @@
 # Role: actionlint configuration. Delete this file and its line in .gitignore once an actionlint
 #       release knows the key; actionlint never reports a waiver that no longer matches.
 paths:
-  # actionlint matches this key against the path it was given (such as ../.github/... or an
-  # absolute path), not the path from the repository root; the leading **/ matches both.
-  '**/.github/workflows/build-images.yaml':
+  # actionlint matches this key against the file's path relative to the directory it runs in
+  # (build-images.yaml, workflows/build-images.yaml, ../.github/workflows/build-images.yaml, ...),
+  # so the leading **/ is needed. No other file in the repository is named build-images.yaml.
+  '**/build-images.yaml':
     ignore:
       - 'unexpected key "queue" for "concurrency" section'

@@ -7,16 +7,19 @@ that build software for them. Every image is built reproducibly from a locked se
 tested on amd64 and arm64, and published with signed build provenance.
 
 - **Reproducible.** Each image is built from a lock of exact RPM files. The same lock, Dockerfile,
-  copied-in files and pinned BuildKit give the same image digest, and the build stops if the digest is
-  not the one recorded.
-- **Verifiable.** Every published image carries SLSA v1 build provenance, signed by the reusable
-  workflow that built it, as GitHub's guidance for SLSA Build Level 3 describes. One command checks that
-  an image was built by this repository's workflow, from this repository's source.
+  copied-in files and pinned buildx and BuildKit give the same image digest, and the build stops if the
+  digest is not the one recorded.
+- **Verifiable.** Published images carry [SLSA v1](https://slsa.dev/spec/v1.0/) build provenance,
+  signed by the reusable workflow that built them, as
+  [GitHub's guidance for SLSA Build Level 3](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/increase-security-rating)
+  describes. One command checks that an image was built by this repository's workflow, from this
+  repository's source.
 - **Nothing extra.** Images start from an empty root, hold their locked packages and a few
   configuration files, and run as user 65532. Runtime images have no shell, no package manager and no
   language package tool.
 - **FIPS crypto policy.** The system crypto policy is `FIPS`, as the DISA RHEL 9 STIG requires, and the
   system OpenSSL loads the FIPS provider at the module version FIPS 140-3 certificate #4857 validates.
+  [Security posture](#security-posture) says what that does and does not cover.
 - **Tested before publishing.** Each image has its own tests, and nothing is published unless every
   image builds and passes them on both architectures.
 
@@ -54,7 +57,7 @@ flowchart LR
 | `ghcr.io/nwarila/ubi9-openjdk-17-runtime` | The headless OpenJDK 17 runtime. |
 | `ghcr.io/nwarila/ubi9-openjdk-21-runtime` | The headless OpenJDK 21 runtime. |
 | `ghcr.io/nwarila/ubi9-openjdk-25-runtime` | The headless OpenJDK 25 runtime. |
-| `ghcr.io/nwarila/ubi9-python-312-runtime` | Python 3.12 and its standard library, apart from the Tk GUI modules (tkinter, IDLE, turtle). No pip. |
+| `ghcr.io/nwarila/ubi9-python-312-runtime` | Python 3.12 and its standard library, apart from the Tk GUI modules (tkinter, IDLE, turtle) and the regression tests (`test`). No pip. |
 | `ghcr.io/nwarila/ubi9-nodejs-24-runtime` | The Node.js 24 runtime, with English locale data only. No npm. |
 | `ghcr.io/nwarila/ubi9-dotnet-10-runtime` | The .NET 10 runtime and the ASP.NET Core shared framework. |
 | `ghcr.io/nwarila/ubi9-dotnet-runtime-deps` | The native libraries that self-contained .NET applications need. No .NET runtime. |
@@ -90,7 +93,7 @@ To check that an image was built by this repository's workflow, from this reposi
 
 ```sh
 gh attestation verify oci://ghcr.io/nwarila/ubi9-micro:latest \
-  --owner NWarila \
+  --repo NWarila/ubi9-images \
   --signer-workflow NWarila/ubi9-images/.github/workflows/build-test-publish.yaml
 ```
 
@@ -106,25 +109,32 @@ What holds today:
 - The system crypto policy is plain `FIPS`, as DISA's RHEL 9 STIG V2R10 requires (RHEL-09-215105), and
   OpenSSL's TLS settings follow it.
 - The system OpenSSL loads the FIPS provider from `openssl-fips-provider` 3.0.7-8.el9, module version
-  3.0.7-395c1a240fbfffd8, the version FIPS 140-3 certificate #4857 validates, and uses it by default.
-  Programs that use the system OpenSSL, including Python, Node.js and .NET, get it.
+  3.0.7-395c1a240fbfffd8, the version FIPS 140-3
+  [certificate #4857](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4857)
+  validates, and uses it by default. Programs that use the system OpenSSL, including Python, Node.js
+  and .NET, get it.
 - Every RPM is pinned by checksum and checked against Red Hat's signing keys; every GitHub Action is
   pinned by commit, and the BuildKit image by digest.
 
 Limits to know:
 
 - The images ship and configure that FIPS module; that alone does not make them FIPS-validated.
-  Certificate #4857 covers the module on its listed platforms (Intel, IBM Z and IBM POWER; no arm64),
-  installed on RHEL 9 already running in FIPS mode. These images are assembled on Ubuntu runners and
-  neither enable nor check FIPS mode, so they carry the validated module version, not a validated
-  configuration.
+  Certificate #4857, an interim validation at Level 1 that sunsets on 2029-10-28, covers the module on
+  its listed platforms (Intel, IBM Z and IBM POWER; no arm64), installed on RHEL 9 already running in
+  FIPS mode. These images are assembled on Ubuntu runners and neither enable nor check FIPS mode, so
+  they carry the validated module version, not a validated configuration.
+- The FIPS provider is the default because each image sets `OPENSSL_CONF` to
+  `/etc/pki/tls/openssl-fips.cnf`. A program that clears its environment reads Red Hat's
+  `/etc/pki/tls/openssl.cnf` instead, which activates only OpenSSL's default provider.
 - A program can still use a non-approved algorithm for a non-security purpose: Python gives MD5 with
   `usedforsecurity=False`, and .NET gives MD5 on its own. The tests check both. Java and Go carry their
   own cryptography, which the FIPS provider does not cover: Java's own providers still serve MD5, 3DES
   and RSA-1024, and the crypto policy restricts only Java's TLS and certificate checks.
-- The shipped provider is affected by CVE-2026-31790. Red Hat fixes it in 3.0.7-11.el9_8
-  (RHSA-2026:27744, Moderate), which is not yet on a FIPS certificate, so the images keep the certified
-  build until it is. Red Hat lists no mitigation.
+- The shipped provider is affected by
+  [CVE-2026-31790](https://access.redhat.com/security/cve/CVE-2026-31790). Red Hat fixes it in
+  3.0.7-11.el9_8 ([RHSA-2026:27744](https://access.redhat.com/errata/RHSA-2026:27744), Moderate),
+  which is not yet on a FIPS certificate, so the images keep the certified build until it is. Red Hat
+  lists no mitigation.
 - In the nine images that do not ship nss, `/etc/crypto-policies/back-ends/nss.config` is a link, where
   RHEL-09-672020 expects a regular file.
 - Not yet in place: an automated STIG scan, a vulnerability scan, an SBOM for each image, and a
@@ -154,7 +164,7 @@ images/<image>/
   digests.txt                the digest each architecture builds to
   test/                      what this image promises, as tests
 build/                       the scripts that lock, build and test every image
-.github/workflows/           CI: build and test changes to build/ and images/, publish on main
+.github/workflows/           CI: build and test changes to an image's inputs, publish on main
 docs/decision-records/       why the repository is the way it is
 ```
 

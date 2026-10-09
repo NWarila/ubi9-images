@@ -43,6 +43,7 @@
 
 # Allow decision records: organization baseline, template slot, and this repository's own.
 !/docs/decision-records/
+!/docs/decision-records/README.md
 !/docs/decision-records/org/
 !/docs/decision-records/org/.gitkeep
 !/docs/decision-records/org/0001-use-architecture-decision-records.md
@@ -59,6 +60,7 @@
 !/docs/decision-records/repo/
 !/docs/decision-records/repo/.gitkeep
 !/docs/decision-records/repo/0001-rebuild-the-image-family-from-zero.md
+!/docs/decision-records/repo/0002-keep-the-renovate-configuration-self-contained.md
 
 # Allow the shared build inputs: the scripts, the held-RPM lists and the files copied into every image.
 !/build/

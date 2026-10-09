@@ -1,30 +1,22 @@
-// Purpose: markdownlint-cli2 ruleset relaxing specific MD rules for this repo's docs.
-// Role: config
-// Micro-container candidate: no (linter config, not gate logic)
-// Note: .jsonc supports // comments; place above the opening brace.
-
+// Purpose: Lint every tracked Markdown file with every markdownlint rule but five. Most Markdown
+//          here is copied unchanged from NWarila/.github: the community files and the
+//          organization's documents under docs/. That repository lints them with the five rules
+//          below turned off; they are off here too, so that a copy that passes there passes here.
+// Role: markdownlint configuration, read by markdownlint-cli2 and by the VS Code markdownlint
+//       extension. To lint every tracked Markdown file, run markdownlint-cli2 with no arguments
+//       from the repository root.
 {
   "config": {
-    "MD003": false,
-    "MD012": {
-      "maximum": 2
-    },
-    "MD013": false,
-    "MD024": {
-      "siblings_only": true
-    },
-    "MD033": false,
-    "MD034": false,
-    "MD036": false,
-    "MD037": false,
-    "MD040": false,
-    "MD046": false,
-    "MD041": false,
-    "MD059": false,
-    "MD060": false
+    "line-length": false,
+    "no-inline-html": false,
+    "no-bare-urls": false,
+    "first-line-heading": false,
+    "table-column-style": false
   },
-  "ignores": [
-    "node_modules/**",
-    "**/node_modules/**"
-  ]
+  // The files to lint: every Markdown file that .gitignore allows, which is every tracked one.
+  // Untracked notes and node_modules folders are skipped.
+  "globs": [
+    "**/*.md"
+  ],
+  "gitignore": true
 }

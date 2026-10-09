@@ -1,18 +1,21 @@
-**
-# Allow the allowlist itself so tracked scope stays auditable.
-!/.gitignore
+# Purpose: Deny by default: nothing is tracked unless it is allowed below, by name (org ADR-0003),
+#          so every newly tracked file is a reviewed choice, never an accident.
+# Role: Git's ignore list, read by Git, and by markdownlint-cli2 to choose the files it lints. A
+#       pull request that adds a file adds its line here too. Git does not look inside an ignored
+#       folder, so each folder on the way to an allowed file has a line of its own; that line
+#       allows no file by itself. Within a group, lines are in git ls-files order, each folder
+#       before its files. To see which line hides a file: git check-ignore -v <path>
 
-# Allow git attributes, editor config and markdownlint config so formatting is deterministic.
-!/.gitattributes
+# Ignore everything.
+**
+
+# The allowlist itself, and the settings for Git, editors and markdownlint.
 !/.editorconfig
+!/.gitattributes
+!/.gitignore
 !/.markdownlint-cli2.jsonc
 
-# Allow the GitHub config root, ownership and dependency-update config.
-!/.github/
-!/.github/CODEOWNERS
-!/.github/renovate.json5
-
-# Allow community health files mirrored from the organization baseline.
+# The README, and the license and community files copied from the organization baseline.
 !/CODE_OF_CONDUCT.md
 !/CONTRIBUTING.md
 !/LICENSE
@@ -20,10 +23,27 @@
 !/SECURITY.md
 !/SUPPORT.md
 
-# Allow the documentation tree and its Diataxis skeleton.
+# GitHub settings and workflows.
+!/.github/
+!/.github/.config/
+!/.github/.config/template-drift.lock
+!/.github/.config/template-drift.yaml
+!/.github/CODEOWNERS
+!/.github/actionlint.yaml
+!/.github/renovate.json5
+!/.github/workflows/
+!/.github/workflows/build-images.yaml
+!/.github/workflows/build-test-publish.yaml
+!/.github/workflows/workflow-containers.yaml
+
+# Documentation: the Diataxis folders, and the reference and explanation pages copied from the
+# organization baseline.
 !/docs/
-!/docs/tutorials/
-!/docs/tutorials/.gitkeep
+!/docs/diagrams/
+!/docs/diagrams/.gitkeep
+!/docs/explanation/
+!/docs/explanation/.gitkeep
+!/docs/explanation/repo-type-taxonomy-and-ci-focus.md
 !/docs/how-to/
 !/docs/how-to/.gitkeep
 !/docs/reference/
@@ -33,15 +53,13 @@
 !/docs/reference/ci-validator-invocation.md
 !/docs/reference/diagram-conventions.md
 !/docs/reference/mirroring.md
-!/docs/explanation/
-!/docs/explanation/.gitkeep
-!/docs/explanation/repo-type-taxonomy-and-ci-focus.md
-!/docs/diagrams/
-!/docs/diagrams/.gitkeep
 !/docs/runbooks/
 !/docs/runbooks/.gitkeep
+!/docs/tutorials/
+!/docs/tutorials/.gitkeep
 
-# Allow decision records: organization baseline, template slot, and this repository's own.
+# Decision records: their index (README.md), the organization's (copied from its baseline), this
+# repository's own, and a placeholder folder for type-template records.
 !/docs/decision-records/
 !/docs/decision-records/README.md
 !/docs/decision-records/org/
@@ -55,14 +73,15 @@
 !/docs/decision-records/org/0007-centralize-universal-ci-reusables-within-each-namespace.md
 !/docs/decision-records/org/0008-enforce-repo-hygiene-by-repo-type.md
 !/docs/decision-records/org/0009-classify-baseline-manifest-byte-identity.md
-!/docs/decision-records/template/
-!/docs/decision-records/template/.gitkeep
 !/docs/decision-records/repo/
 !/docs/decision-records/repo/.gitkeep
 !/docs/decision-records/repo/0001-rebuild-the-image-family-from-zero.md
 !/docs/decision-records/repo/0002-keep-the-renovate-configuration-self-contained.md
+!/docs/decision-records/template/
+!/docs/decision-records/template/.gitkeep
 
-# Allow the shared build inputs: the scripts, the held-RPM lists and the files copied into every image.
+# Shared by every image: the scripts that lock, build and test it, the lists that
+# build/generate-lock.sh reads, and the OpenSSL configuration.
 !/build/
 !/build/build-image.sh
 !/build/download-rpms.sh
@@ -74,130 +93,47 @@
 !/build/remove-install-only.sh
 !/build/test-image.sh
 
-# Allow the image folders: a Dockerfile, a package list and one generated lock per architecture each.
+# The images, one folder each: its Dockerfile, digests.txt (the digest each architecture's build
+# must give), packages.txt, one generated packages.lock per architecture, and test/ (run by
+# build/test-image.sh). The Node.js images add the module files their Dockerfile describes.
 !/images/
+
 !/images/dotnet-10-runtime/
 !/images/dotnet-10-runtime/Dockerfile
+!/images/dotnet-10-runtime/digests.txt
 !/images/dotnet-10-runtime/packages.lock.aarch64
 !/images/dotnet-10-runtime/packages.lock.x86_64
 !/images/dotnet-10-runtime/packages.txt
+!/images/dotnet-10-runtime/test/
+!/images/dotnet-10-runtime/test/test.sh
+
 !/images/dotnet-10-toolset/
 !/images/dotnet-10-toolset/Dockerfile
+!/images/dotnet-10-toolset/digests.txt
 !/images/dotnet-10-toolset/packages.lock.aarch64
 !/images/dotnet-10-toolset/packages.lock.x86_64
 !/images/dotnet-10-toolset/packages.txt
-!/images/dotnet-runtime-deps/
-!/images/dotnet-runtime-deps/Dockerfile
-!/images/dotnet-runtime-deps/packages.lock.aarch64
-!/images/dotnet-runtime-deps/packages.lock.x86_64
-!/images/dotnet-runtime-deps/packages.txt
-!/images/go-toolset/
-!/images/go-toolset/Dockerfile
-!/images/go-toolset/packages.lock.aarch64
-!/images/go-toolset/packages.lock.x86_64
-!/images/go-toolset/packages.txt
-!/images/micro/
-!/images/micro/Dockerfile
-!/images/micro/packages.lock.aarch64
-!/images/micro/packages.lock.x86_64
-!/images/micro/packages.txt
-!/images/nodejs-24-runtime/
-!/images/nodejs-24-runtime/Dockerfile
-!/images/nodejs-24-runtime/modules.txt
-!/images/nodejs-24-runtime/packages.lock.aarch64
-!/images/nodejs-24-runtime/packages.lock.x86_64
-!/images/nodejs-24-runtime/packages.txt
-!/images/nodejs-24-toolset/
-!/images/nodejs-24-toolset/Dockerfile
-!/images/nodejs-24-toolset/modules.txt
-!/images/nodejs-24-toolset/nodejs.module
-!/images/nodejs-24-toolset/packages.lock.aarch64
-!/images/nodejs-24-toolset/packages.lock.x86_64
-!/images/nodejs-24-toolset/packages.txt
-!/images/openjdk-17-runtime/
-!/images/openjdk-17-runtime/Dockerfile
-!/images/openjdk-17-runtime/packages.lock.aarch64
-!/images/openjdk-17-runtime/packages.lock.x86_64
-!/images/openjdk-17-runtime/packages.txt
-!/images/openjdk-17-toolset/
-!/images/openjdk-17-toolset/Dockerfile
-!/images/openjdk-17-toolset/packages.lock.aarch64
-!/images/openjdk-17-toolset/packages.lock.x86_64
-!/images/openjdk-17-toolset/packages.txt
-!/images/openjdk-21-runtime/
-!/images/openjdk-21-runtime/Dockerfile
-!/images/openjdk-21-runtime/packages.lock.aarch64
-!/images/openjdk-21-runtime/packages.lock.x86_64
-!/images/openjdk-21-runtime/packages.txt
-!/images/openjdk-21-toolset/
-!/images/openjdk-21-toolset/Dockerfile
-!/images/openjdk-21-toolset/packages.lock.aarch64
-!/images/openjdk-21-toolset/packages.lock.x86_64
-!/images/openjdk-21-toolset/packages.txt
-!/images/openjdk-25-runtime/
-!/images/openjdk-25-runtime/Dockerfile
-!/images/openjdk-25-runtime/packages.lock.aarch64
-!/images/openjdk-25-runtime/packages.lock.x86_64
-!/images/openjdk-25-runtime/packages.txt
-!/images/openjdk-25-toolset/
-!/images/openjdk-25-toolset/Dockerfile
-!/images/openjdk-25-toolset/packages.lock.aarch64
-!/images/openjdk-25-toolset/packages.lock.x86_64
-!/images/openjdk-25-toolset/packages.txt
-!/images/python-312-runtime/
-!/images/python-312-runtime/Dockerfile
-!/images/python-312-runtime/packages.lock.aarch64
-!/images/python-312-runtime/packages.lock.x86_64
-!/images/python-312-runtime/packages.txt
-!/images/python-312-toolset/
-!/images/python-312-toolset/Dockerfile
-!/images/python-312-toolset/packages.lock.aarch64
-!/images/python-312-toolset/packages.lock.x86_64
-!/images/python-312-toolset/packages.txt
-
-# Allow the organization staple workflow and the template-drift configuration it reads.
-!/.github/workflows/
-!/.github/workflows/workflow-containers.yaml
-!/.github/.config/
-!/.github/.config/template-drift.lock
-!/.github/.config/template-drift.yaml
-
-# Allow the repository's own image workflows: the build-and-publish caller and the reusable
-# workflow that builds, tests and publishes.
-!/.github/workflows/build-images.yaml
-!/.github/workflows/build-test-publish.yaml
-
-# Allow the actionlint configuration: it waives the one message actionlint gives for a
-# documented key it does not know yet.
-!/.github/actionlint.yaml
-
-# Allow the recorded image digests: one file per image, read by build/build-image.sh.
-!/images/dotnet-10-runtime/digests.txt
-!/images/dotnet-10-toolset/digests.txt
-!/images/dotnet-runtime-deps/digests.txt
-!/images/go-toolset/digests.txt
-!/images/micro/digests.txt
-!/images/nodejs-24-runtime/digests.txt
-!/images/nodejs-24-toolset/digests.txt
-!/images/openjdk-17-runtime/digests.txt
-!/images/openjdk-17-toolset/digests.txt
-!/images/openjdk-21-runtime/digests.txt
-!/images/openjdk-21-toolset/digests.txt
-!/images/openjdk-25-runtime/digests.txt
-!/images/openjdk-25-toolset/digests.txt
-!/images/python-312-runtime/digests.txt
-!/images/python-312-toolset/digests.txt
-
-# Allow the image tests: one test folder per image, run by build/test-image.sh.
-!/images/dotnet-10-runtime/test/
-!/images/dotnet-10-runtime/test/test.sh
 !/images/dotnet-10-toolset/test/
 !/images/dotnet-10-toolset/test/probe/
 !/images/dotnet-10-toolset/test/probe/Program.cs
 !/images/dotnet-10-toolset/test/probe/probe.csproj
 !/images/dotnet-10-toolset/test/test.sh
+
+!/images/dotnet-runtime-deps/
+!/images/dotnet-runtime-deps/Dockerfile
+!/images/dotnet-runtime-deps/digests.txt
+!/images/dotnet-runtime-deps/packages.lock.aarch64
+!/images/dotnet-runtime-deps/packages.lock.x86_64
+!/images/dotnet-runtime-deps/packages.txt
 !/images/dotnet-runtime-deps/test/
 !/images/dotnet-runtime-deps/test/test.sh
+
+!/images/go-toolset/
+!/images/go-toolset/Dockerfile
+!/images/go-toolset/digests.txt
+!/images/go-toolset/packages.lock.aarch64
+!/images/go-toolset/packages.lock.x86_64
+!/images/go-toolset/packages.txt
 !/images/go-toolset/test/
 !/images/go-toolset/test/probe/
 !/images/go-toolset/test/probe/go.mod
@@ -205,12 +141,36 @@
 !/images/go-toolset/test/probe/linking_static.go
 !/images/go-toolset/test/probe/main.go
 !/images/go-toolset/test/test.sh
+
+!/images/micro/
+!/images/micro/Dockerfile
+!/images/micro/digests.txt
+!/images/micro/packages.lock.aarch64
+!/images/micro/packages.lock.x86_64
+!/images/micro/packages.txt
 !/images/micro/test/
 !/images/micro/test/Containerfile
 !/images/micro/test/test.sh
+
+!/images/nodejs-24-runtime/
+!/images/nodejs-24-runtime/Dockerfile
+!/images/nodejs-24-runtime/digests.txt
+!/images/nodejs-24-runtime/modules.txt
+!/images/nodejs-24-runtime/packages.lock.aarch64
+!/images/nodejs-24-runtime/packages.lock.x86_64
+!/images/nodejs-24-runtime/packages.txt
 !/images/nodejs-24-runtime/test/
 !/images/nodejs-24-runtime/test/probe.js
 !/images/nodejs-24-runtime/test/test.sh
+
+!/images/nodejs-24-toolset/
+!/images/nodejs-24-toolset/Dockerfile
+!/images/nodejs-24-toolset/digests.txt
+!/images/nodejs-24-toolset/modules.txt
+!/images/nodejs-24-toolset/nodejs.module
+!/images/nodejs-24-toolset/packages.lock.aarch64
+!/images/nodejs-24-toolset/packages.lock.x86_64
+!/images/nodejs-24-toolset/packages.txt
 !/images/nodejs-24-toolset/test/
 !/images/nodejs-24-toolset/test/app/
 !/images/nodejs-24-toolset/test/app/app.js
@@ -219,24 +179,80 @@
 !/images/nodejs-24-toolset/test/lib/index.js
 !/images/nodejs-24-toolset/test/lib/package.json
 !/images/nodejs-24-toolset/test/test.sh
+
+!/images/openjdk-17-runtime/
+!/images/openjdk-17-runtime/Dockerfile
+!/images/openjdk-17-runtime/digests.txt
+!/images/openjdk-17-runtime/packages.lock.aarch64
+!/images/openjdk-17-runtime/packages.lock.x86_64
+!/images/openjdk-17-runtime/packages.txt
 !/images/openjdk-17-runtime/test/
 !/images/openjdk-17-runtime/test/Probe.java
 !/images/openjdk-17-runtime/test/test.sh
+
+!/images/openjdk-17-toolset/
+!/images/openjdk-17-toolset/Dockerfile
+!/images/openjdk-17-toolset/digests.txt
+!/images/openjdk-17-toolset/packages.lock.aarch64
+!/images/openjdk-17-toolset/packages.lock.x86_64
+!/images/openjdk-17-toolset/packages.txt
 !/images/openjdk-17-toolset/test/
 !/images/openjdk-17-toolset/test/test.sh
+
+!/images/openjdk-21-runtime/
+!/images/openjdk-21-runtime/Dockerfile
+!/images/openjdk-21-runtime/digests.txt
+!/images/openjdk-21-runtime/packages.lock.aarch64
+!/images/openjdk-21-runtime/packages.lock.x86_64
+!/images/openjdk-21-runtime/packages.txt
 !/images/openjdk-21-runtime/test/
 !/images/openjdk-21-runtime/test/Probe.java
 !/images/openjdk-21-runtime/test/test.sh
+
+!/images/openjdk-21-toolset/
+!/images/openjdk-21-toolset/Dockerfile
+!/images/openjdk-21-toolset/digests.txt
+!/images/openjdk-21-toolset/packages.lock.aarch64
+!/images/openjdk-21-toolset/packages.lock.x86_64
+!/images/openjdk-21-toolset/packages.txt
 !/images/openjdk-21-toolset/test/
 !/images/openjdk-21-toolset/test/test.sh
+
+!/images/openjdk-25-runtime/
+!/images/openjdk-25-runtime/Dockerfile
+!/images/openjdk-25-runtime/digests.txt
+!/images/openjdk-25-runtime/packages.lock.aarch64
+!/images/openjdk-25-runtime/packages.lock.x86_64
+!/images/openjdk-25-runtime/packages.txt
 !/images/openjdk-25-runtime/test/
 !/images/openjdk-25-runtime/test/Probe.java
 !/images/openjdk-25-runtime/test/test.sh
+
+!/images/openjdk-25-toolset/
+!/images/openjdk-25-toolset/Dockerfile
+!/images/openjdk-25-toolset/digests.txt
+!/images/openjdk-25-toolset/packages.lock.aarch64
+!/images/openjdk-25-toolset/packages.lock.x86_64
+!/images/openjdk-25-toolset/packages.txt
 !/images/openjdk-25-toolset/test/
 !/images/openjdk-25-toolset/test/test.sh
+
+!/images/python-312-runtime/
+!/images/python-312-runtime/Dockerfile
+!/images/python-312-runtime/digests.txt
+!/images/python-312-runtime/packages.lock.aarch64
+!/images/python-312-runtime/packages.lock.x86_64
+!/images/python-312-runtime/packages.txt
 !/images/python-312-runtime/test/
 !/images/python-312-runtime/test/probe.py
 !/images/python-312-runtime/test/test.sh
+
+!/images/python-312-toolset/
+!/images/python-312-toolset/Dockerfile
+!/images/python-312-toolset/digests.txt
+!/images/python-312-toolset/packages.lock.aarch64
+!/images/python-312-toolset/packages.lock.x86_64
+!/images/python-312-toolset/packages.txt
 !/images/python-312-toolset/test/
 !/images/python-312-toolset/test/extension/
 !/images/python-312-toolset/test/extension/probe_ext.c

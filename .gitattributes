@@ -1,22 +1,9 @@
-# Purpose: Force LF EOL per file type and export-ignore dotfiles from archives.
-# Role: config
-# Micro-container candidate: no (VCS attributes, not gate logic)
-
+# Purpose: Commit and check out every text file with LF line endings, on every
+#          platform and whatever core.autocrlf says. The build copies files
+#          from the working tree into the images (build/openssl-fips.cnf, for
+#          one), so CRLF endings would change the image digests; bash also
+#          cannot run a script that has them.
+# Role: Git attributes, read by Git whenever it commits or checks out a file.
+#       One rule covers every path: Git detects binary files itself and leaves
+#       them unchanged.
 * text=auto eol=lf
-
-*.json       text eol=lf
-*.json5      text eol=lf
-*.md         text eol=lf
-*.py         text eol=lf
-*.sh         text eol=lf
-*.yaml       text eol=lf
-*.yml        text eol=lf
-.dockerignore text eol=lf
-Dockerfile   text eol=lf
-Makefile     text eol=lf
-LICENSE      text eol=lf
-
-.gitignore                export-ignore
-.gitattributes            export-ignore
-.editorconfig             export-ignore
-.markdownlint-cli2.jsonc  export-ignore

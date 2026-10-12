@@ -24,7 +24,7 @@ jobs:
   # Every folder under images/ is an image: a new folder is built, tested and published with no
   # other change.
   images:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -61,9 +61,9 @@ jobs:
         # Each architecture builds on a runner of that architecture: no emulation.
         include:
           - arch: x86_64
-            runner: ubuntu-24.04
+            runner: ubuntu-26.04
           - arch: aarch64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-26.04-arm
     env:
       IMAGE: ${{ matrix.image }}
       ARCH: ${{ matrix.arch }}
@@ -114,7 +114,7 @@ jobs:
     name: publish ${{ matrix.image }}
     needs: [images, build]
     if: inputs.publish
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # No permissions block: this job gets exactly what the caller grants, which on the publish
     # path is contents read and packages, id-token and attestations write. It runs no build step.

@@ -79,8 +79,8 @@ jobs:
       # digest. A different version can produce different bytes from the same lock.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          version: v0.37.1
-          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+          version: v0.38.0
+          driver-opts: image=moby/buildkit:v0.34.0@sha256:b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c
       - name: Build the image from its lock
         run: build/build-image.sh "$IMAGE" "$ARCH"
       # Runs images/<image>/test/test.sh with podman, which GitHub's runners include. A toolset's
@@ -139,8 +139,8 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          version: v0.37.1
-          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+          version: v0.38.0
+          driver-opts: image=moby/buildkit:v0.34.0@sha256:b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c
       # Logged in before the first read: GHCR refuses an anonymous read of a package that does not
       # exist yet (403) instead of answering "not found". skopeo pushes the images, docker buildx
       # the index, and actions/attest the attestations.
